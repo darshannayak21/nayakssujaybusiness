@@ -57,12 +57,6 @@ export const LoginView: React.FC = () => {
           routing="hash"
         />
       </div>
-
-      {/* Quick Admin Helper Badge */}
-      <div className="mt-6 text-center text-[11px] text-plaza-text-3 relative z-10 bg-white/80 border border-plaza-line/60 rounded-xl px-4 py-2 shadow-2xs backdrop-blur-xs">
-        <span>Authorized Hotel Admin: </span>
-        <span className="font-mono font-semibold text-plaza-text">nayaksujayadmin</span>
-      </div>
     </div>
   );
 };
