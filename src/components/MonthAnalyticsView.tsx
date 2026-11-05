@@ -601,7 +601,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
                       : 'text-plaza-text-3 hover:text-plaza-text'
                   }`}
                 >
-                  🔥 Top Peak Days
+                  Top Peak Days
                 </button>
                 <button
                   onClick={() => setDailyTableFilter('active')}
@@ -611,7 +611,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
                       : 'text-plaza-text-3 hover:text-plaza-text'
                   }`}
                 >
-                  📋 Active Days Only
+                  Active Days Only
                 </button>
                 <button
                   onClick={() => setDailyTableFilter('all')}
@@ -621,7 +621,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
                       : 'text-plaza-text-3 hover:text-plaza-text'
                   }`}
                 >
-                  📅 Full Month ({summary?.totalDays} Days)
+                  Full Month ({summary?.totalDays} Days)
                 </button>
               </div>
             </div>
@@ -723,7 +723,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
         <>
           {/* Top 4 Year Insight Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
-            {/* 🏆 Best Selling Month */}
+            {/* Best Selling Month */}
             <div className="bg-plaza-card rounded-2xl p-4 border border-plaza-line/50 relative overflow-hidden">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] font-semibold tracking-wider uppercase text-plaza-accent flex items-center gap-1">
@@ -852,7 +852,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
                         <div className="absolute -top-24 z-30 bg-[#18181b] text-white px-3 py-2 rounded-xl text-[10px] shadow-xl pointer-events-none whitespace-nowrap min-w-[130px]">
                           <div className="font-bold text-white border-b border-white/10 pb-1 mb-1 flex items-center justify-between gap-2">
                             <span>{m.monthName} {year}</span>
-                            {isBest && <span className="text-amber-400 font-bold">★ Best Month</span>}
+                            {isBest && <span className="text-amber-400 font-bold">Best Month</span>}
                           </div>
                           <div className="text-amber-400 font-bold">Revenue: ₹{m.totalRevenue.toLocaleString('en-IN')}</div>
                           <div className="text-emerald-300">Cash: ₹{m.totalCash.toLocaleString('en-IN')}</div>
@@ -915,7 +915,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
                       : 'text-plaza-text-3 hover:text-plaza-text'
                   }`}
                 >
-                  🏆 Best Selling Rank
+                  Best Selling Rank
                 </button>
                 <button
                   onClick={() => setMonthlySortOrder('calendar')}
@@ -925,7 +925,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
                       : 'text-plaza-text-3 hover:text-plaza-text'
                   }`}
                 >
-                  📅 Calendar Order (Jan - Dec)
+                  Calendar Order (Jan - Dec)
                 </button>
               </div>
             </div>
