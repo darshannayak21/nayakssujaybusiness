@@ -4,7 +4,6 @@ export interface RoomDefinition {
   slNo: number;
   roomNumber: string;
   floor: 1 | 2 | 3;
-  type?: string;
 }
 
 export const ROOM_DEFINITIONS: RoomDefinition[] = [
@@ -47,6 +46,7 @@ export function createEmptyRoomEntry(def: RoomDefinition): RoomEntry {
     roomNumber: def.roomNumber,
     floor: def.floor,
     customerName: '',
+    platform: 'Direct',
     isAgoda: false,
     roomRent: '',
     advanceCash: '',
@@ -99,22 +99,32 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
   let checkedOutRooms = 0;
   let agodaBookingsCount = 0;
 
+  const platformTotals: Record<string, number> = {};
+  const platformBookingsCount: Record<string, number> = {};
+
   rooms.forEach(r => {
     if (typeof r.roomRent === 'number') roomRent += r.roomRent;
 
-    // Check if Agoda booking (customer name entered or isAgoda flag is true)
-    const isAgodaBooking = r.isAgoda || (r.customerName && r.customerName.trim().length > 0);
+    // Platform identifier: determined solely by platform dropdown (NOT just name)
+    const isOnlinePlatform = Boolean(r.platform && r.platform !== 'Direct' && r.platform.trim().length > 0);
     
-    if (isAgodaBooking) {
-      agodaBookingsCount++;
-      // In Agoda there is no advance concept: all revenue is OTA online
-      if (typeof r.tBusinessOnline === 'number') {
-        tBusinessAgoda += r.tBusinessOnline;
-      } else if (typeof r.roomRent === 'number' && r.roomRent > 0) {
-        tBusinessAgoda += r.roomRent;
+    if (isOnlinePlatform) {
+      const plat = r.platform.trim();
+      platformBookingsCount[plat] = (platformBookingsCount[plat] || 0) + 1;
+      
+      const amt = typeof r.tBusinessOnline === 'number' 
+        ? r.tBusinessOnline 
+        : (typeof r.roomRent === 'number' && r.roomRent > 0 ? r.roomRent : 0);
+
+      platformTotals[plat] = (platformTotals[plat] || 0) + amt;
+
+      if (plat.toLowerCase() === 'agoda') {
+        tBusinessAgoda += amt;
+        agodaBookingsCount++;
       }
+      // For online platforms, advance does not apply (paid through OTA)
     } else {
-      // Direct / walk-in guests: advances and desk cash apply
+      // Direct / Walk-in guests
       if (typeof r.advanceCash === 'number') advanceCash += r.advanceCash;
       if (typeof r.advanceOnline === 'number') advanceOnline += r.advanceOnline;
       if (typeof r.tBusinessCash === 'number') tBusinessCash += r.tBusinessCash;
@@ -142,14 +152,15 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
   });
 
   const advanceTotal = advanceCash + advanceOnline;
-  const tBusinessOnline = tBusinessAgoda + tBusinessOtherOnline;
+  const platformsOnlineSum = Object.values(platformTotals).reduce((sum, v) => sum + v, 0);
+  const tBusinessOnline = platformsOnlineSum + tBusinessOtherOnline;
   const tBusinessTotal = tBusinessCash + tBusinessOnline;
   const netCash = (advanceCash + tBusinessCash) - refund;
   const netOnline = advanceOnline + tBusinessOnline;
   const totalCollections = netCash + netOnline;
   
-  // Day total matching notebook: Advance + Cash + Agoda Online + Other Online
-  const dayTotal = advanceTotal + tBusinessCash + tBusinessAgoda + tBusinessOtherOnline;
+  // Day total: Advance + Cash + sum(all online platforms) + Other Online
+  const dayTotal = advanceTotal + tBusinessCash + platformsOnlineSum + tBusinessOtherOnline;
 
   const vacantRooms = ROOM_DEFINITIONS.length - occupiedRooms - checkedOutRooms;
 
@@ -162,6 +173,8 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
     tBusinessAgoda,
     tBusinessOtherOnline,
     tBusinessOnline,
+    platformTotals,
+    platformBookingsCount,
     tBusinessTotal,
     gst5,
     balance,

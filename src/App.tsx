@@ -12,6 +12,7 @@ import {
   getTodayDateString,
   clearAllDatabaseData
 } from './services/db';
+import { initBookingPlatformsFromCloud } from './services/platforms';
 
 export const App: React.FC = () => {
   const [showSplash, setShowSplash] = useState<boolean>(true);
@@ -31,6 +32,8 @@ export const App: React.FC = () => {
           localStorage.clear();
           localStorage.setItem('plaza_clean_slate_active_v4_empty', 'true');
         }
+
+        await initBookingPlatformsFromCloud();
 
         const initialSheet = await getDaySheet(currentDate);
         setSheet(initialSheet);

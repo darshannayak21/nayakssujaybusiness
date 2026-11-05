@@ -171,7 +171,13 @@ export function generateDailyPDF(sheet: DaySheet) {
   };
 
   const tableBody: RowInput[] = sheet.rooms.map((r) => {
-    const isAgoda = r.isAgoda || (r.customerName && r.customerName.trim().length > 0);
+    const isOnlinePlatform = Boolean(r.platform && r.platform !== 'Direct' && r.platform.trim().length > 0);
+    const platformLabel = isOnlinePlatform ? r.platform.trim() : '';
+
+    let customerCellText = r.customerName || '';
+    if (isOnlinePlatform) {
+      customerCellText = customerCellText ? `${customerCellText} [${platformLabel}]` : `[${platformLabel}]`;
+    }
 
     return [
       { content: String(r.slNo), styles: { halign: 'center' as const } },
@@ -186,23 +192,23 @@ export function generateDailyPDF(sheet: DaySheet) {
       },
       { content: formatNum(r.roomRent), styles: { halign: 'right' as const } },
       { 
-        content: r.customerName ? `${r.customerName} (Agoda)` : '', 
+        content: customerCellText, 
         styles: { 
           halign: 'left' as const, 
-          fontStyle: isAgoda ? 'bold' as const : 'normal' as const,
-          textColor: isAgoda ? HEX_ACCENT : HEX_TEXT,
+          fontStyle: isOnlinePlatform ? 'bold' as const : 'normal' as const,
+          textColor: isOnlinePlatform ? HEX_ACCENT : HEX_TEXT,
         } 
       },
-      // In Agoda there is no advance option: show '-'
-      { content: isAgoda ? '-' : formatNum(r.advanceCash), styles: { halign: 'right' as const, textColor: isAgoda ? HEX_TEXT_LIGHT : HEX_TEXT } },
-      { content: isAgoda ? '-' : formatNum(r.advanceOnline), styles: { halign: 'right' as const, textColor: isAgoda ? HEX_TEXT_LIGHT : HEX_TEXT } },
+      // In online platforms there is no advance option: show '-'
+      { content: isOnlinePlatform ? '-' : formatNum(r.advanceCash), styles: { halign: 'right' as const, textColor: isOnlinePlatform ? HEX_TEXT_LIGHT : HEX_TEXT } },
+      { content: isOnlinePlatform ? '-' : formatNum(r.advanceOnline), styles: { halign: 'right' as const, textColor: isOnlinePlatform ? HEX_TEXT_LIGHT : HEX_TEXT } },
       { content: formatNum(r.tBusinessCash), styles: { halign: 'right' as const } },
       { 
         content: formatNum(r.tBusinessOnline), 
         styles: { 
           halign: 'right' as const, 
-          fontStyle: isAgoda ? 'bold' as const : 'normal' as const,
-          textColor: isAgoda ? HEX_ACCENT : HEX_TEXT,
+          fontStyle: isOnlinePlatform ? 'bold' as const : 'normal' as const,
+          textColor: isOnlinePlatform ? HEX_ACCENT : HEX_TEXT,
         } 
       },
       { content: formatNum(r.gst5), styles: { halign: 'right' as const } },
@@ -336,40 +342,50 @@ export function generateDailyPDF(sheet: DaySheet) {
  * Followed by GRAND TOTAL and Prepared By / Date lines at bottom.
  */
 export function generateMonthlyPDF(summary: MonthSummary) {
-  // A4 Portrait: 210mm x 297mm
+  // A4 Landscape: 297mm x 210mm for maximum horizontal space to support multiple OTA platforms
   const doc = new jsPDF({
-    orientation: 'portrait',
+    orientation: 'landscape',
     unit: 'mm',
     format: 'a4',
   });
 
-  const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
-  const margin = 14;
-  const contentWidth = pageWidth - margin * 2; // 182mm
+  const pageWidth = doc.internal.pageSize.getWidth(); // 297mm
+  const pageHeight = doc.internal.pageSize.getHeight(); // 210mm
+  const margin = 10;
+  const contentWidth = pageWidth - margin * 2; // 277mm
 
   // Header Title
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
+  doc.setFontSize(13);
   doc.setTextColor(RGB_TEXT[0], RGB_TEXT[1], RGB_TEXT[2]);
-  doc.text("NAYAK'S SUJAY PLAZA", margin, 15);
+  doc.text("NAYAK'S SUJAY PLAZA", margin, 12);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(RGB_TEXT_MUTED[0], RGB_TEXT_MUTED[1], RGB_TEXT_MUTED[2]);
-  doc.text(`Monthly Business Statement  ·  ${summary.monthName} ${summary.year}`, margin, 20);
+  doc.text(`Monthly Business Statement  ·  ${summary.monthName} ${summary.year}  ·  Rooms 101 – 303`, margin, 17);
 
-  // Exact Table Header matching Image 1
-  const tableHead = [
-    [
-      { content: 'SR. NO.', styles: { halign: 'center' as const } },
-      { content: 'DATE', styles: { halign: 'center' as const } },
-      { content: 'ADVANCE', styles: { halign: 'right' as const } },
-      { content: 'CASH', styles: { halign: 'right' as const } },
-      { content: 'ONLINE\n(AGODA)', styles: { halign: 'right' as const } },
-      { content: 'ONLINE\n(OTHERS)', styles: { halign: 'right' as const } },
-      { content: '(DAY TOTAL)', styles: { halign: 'right' as const, fontStyle: 'bold' as const } },
-    ]
+  // Dynamic Platforms
+  const platforms = summary.activePlatforms && summary.activePlatforms.length > 0 
+    ? summary.activePlatforms 
+    : ['Agoda'];
+
+  // Dynamic Table Header
+  const headCols: any[] = [
+    { content: 'SR. NO.', styles: { halign: 'center' as const } },
+    { content: 'DATE', styles: { halign: 'center' as const } },
+    { content: 'ADVANCE', styles: { halign: 'right' as const } },
+    { content: 'CASH', styles: { halign: 'right' as const } },
   ];
+
+  platforms.forEach(p => {
+    headCols.push({ content: `ONLINE\n(${p.toUpperCase()})`, styles: { halign: 'right' as const } });
+  });
+
+  headCols.push({ content: 'ONLINE\n(OTHERS)', styles: { halign: 'right' as const } });
+  headCols.push({ content: '(DAY TOTAL)', styles: { halign: 'right' as const, fontStyle: 'bold' as const } });
+
+  const tableHead = [headCols];
 
   const formatNum = (val: number | undefined) => {
     if (!val || val === 0) return '-';
@@ -377,19 +393,29 @@ export function generateMonthlyPDF(summary: MonthSummary) {
   };
 
   const tableBody: RowInput[] = summary.days.map((d) => {
-    return [
+    const row: any[] = [
       { content: String(d.dayNumber), styles: { halign: 'center' as const } },
       { content: d.formattedDate, styles: { halign: 'center' as const, fontStyle: 'normal' as const } },
       { content: formatNum(d.advanceTotal), styles: { halign: 'right' as const } },
       { content: formatNum(d.tBusinessCash), styles: { halign: 'right' as const } },
-      { content: formatNum(d.agodaOnline), styles: { halign: 'right' as const, fontStyle: d.agodaOnline > 0 ? 'bold' as const : 'normal' as const } },
-      { content: formatNum(d.otherOnline), styles: { halign: 'right' as const } },
-      { content: formatNum(d.dayTotal), styles: { halign: 'right' as const, fontStyle: 'bold' as const } },
     ];
+
+    platforms.forEach(p => {
+      const amt = d.platformTotals?.[p] || (p.toLowerCase() === 'agoda' ? d.agodaOnline : 0);
+      row.push({ 
+        content: formatNum(amt), 
+        styles: { halign: 'right' as const, fontStyle: amt > 0 ? 'bold' as const : 'normal' as const } 
+      });
+    });
+
+    row.push({ content: formatNum(d.otherOnline), styles: { halign: 'right' as const } });
+    row.push({ content: formatNum(d.dayTotal), styles: { halign: 'right' as const, fontStyle: 'bold' as const } });
+
+    return row;
   });
 
-  // GRAND TOTAL Row at bottom (Exact match to notebook)
-  tableBody.push([
+  // GRAND TOTAL Row at bottom (Dynamic per platform)
+  const grandTotalRow: any[] = [
     { 
       content: 'GRAND TOTAL', 
       colSpan: 2, 
@@ -408,52 +434,71 @@ export function generateMonthlyPDF(summary: MonthSummary) {
       content: summary.totalCash > 0 ? `Rs. ${summary.totalCash.toLocaleString('en-IN')}` : '-', 
       styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } 
     },
-    { 
-      content: summary.totalAgoda > 0 ? `Rs. ${summary.totalAgoda.toLocaleString('en-IN')}` : '-', 
+  ];
+
+  platforms.forEach(p => {
+    const tot = summary.platformTotals?.[p] || (p.toLowerCase() === 'agoda' ? summary.totalAgoda : 0);
+    grandTotalRow.push({ 
+      content: tot > 0 ? `Rs. ${tot.toLocaleString('en-IN')}` : '-', 
       styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } 
-    },
-    { 
-      content: summary.totalOtherOnline > 0 ? `Rs. ${summary.totalOtherOnline.toLocaleString('en-IN')}` : '-', 
-      styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } 
-    },
-    { 
-      content: `Rs. ${summary.totalRevenue.toLocaleString('en-IN')}`, 
-      styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } 
-    },
-  ]);
+    });
+  });
+
+  grandTotalRow.push({ 
+    content: summary.totalOtherOnline > 0 ? `Rs. ${summary.totalOtherOnline.toLocaleString('en-IN')}` : '-', 
+    styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } 
+  });
+
+  grandTotalRow.push({ 
+    content: `Rs. ${summary.totalRevenue.toLocaleString('en-IN')}`, 
+    styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } 
+  });
+
+  tableBody.push(grandTotalRow);
+
+  // Column width calculations for 277mm Landscape
+  const srWidth = 14;
+  const dateWidth = 22;
+  const remainingWidth = contentWidth - srWidth - dateWidth;
+  const remainingColsCount = 2 + platforms.length + 2; // Advance, Cash, Platforms..., Other, DayTotal
+  const colWidth = Math.floor((remainingWidth / remainingColsCount) * 10) / 10;
+
+  const columnStylesObj: Record<number, any> = {
+    0: { cellWidth: srWidth },
+    1: { cellWidth: dateWidth },
+  };
+
+  for (let c = 2; c < 2 + remainingColsCount; c++) {
+    columnStylesObj[c] = { cellWidth: colWidth };
+  }
+
+  const tableFontSize = 6.8;
+  const tableCellPadding = { top: 1.15, bottom: 1.15, left: 1.5, right: 1.5 };
 
   autoTable(doc, {
-    startY: 24,
-    margin: { left: margin, right: margin, bottom: 25 },
+    startY: 20,
+    margin: { left: margin, right: margin, bottom: 15 },
     tableWidth: contentWidth,
     head: tableHead as any,
     body: tableBody,
     theme: 'plain',
     styles: {
       font: 'helvetica',
-      fontSize: 7.2,
+      fontSize: tableFontSize,
       textColor: HEX_TEXT,
       lineColor: HEX_LINE,
       lineWidth: 0.16,
-      cellPadding: { top: 1.4, bottom: 1.4, left: 1.5, right: 1.5 },
+      cellPadding: tableCellPadding,
     },
     headStyles: {
       fillColor: '#FFFFFF',
       textColor: HEX_TEXT,
-      fontSize: 7.2,
+      fontSize: tableFontSize,
       fontStyle: 'bold',
       lineColor: HEX_LINE,
       lineWidth: 0.22,
     },
-    columnStyles: {
-      0: { cellWidth: 16 }, // SR. NO.
-      1: { cellWidth: 26 }, // DATE
-      2: { cellWidth: 26 }, // ADVANCE
-      3: { cellWidth: 26 }, // CASH
-      4: { cellWidth: 30 }, // ONLINE (AGODA)
-      5: { cellWidth: 28 }, // ONLINE (OTHERS)
-      6: { cellWidth: 30 }, // (DAY TOTAL)
-    },
+    columnStyles: columnStylesObj,
     didDrawCell: (data) => {
       // Dark border on top of GRAND TOTAL row
       if (data.section === 'body' && data.row.index === summary.days.length) {
@@ -465,9 +510,9 @@ export function generateMonthlyPDF(summary: MonthSummary) {
   });
 
   // Footer: Prepared By & Date
-  const signY = 282;
+  const signY = pageHeight - 7;
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(RGB_TEXT[0], RGB_TEXT[1], RGB_TEXT[2]);
   
   doc.text('Prepared By : __________________________________', margin, signY);

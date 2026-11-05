@@ -2,6 +2,7 @@ import Dexie, { Table } from 'dexie';
 import { DaySheet, MonthSummary, MonthSummaryDay } from '../types';
 import { ROOM_DEFINITIONS, createInitialRooms, computeSheetTotals } from '../data/rooms';
 import { supabase } from './supabase';
+import { getBookingPlatforms } from './platforms';
 
 export class PlazaDatabase extends Dexie {
   sheets!: Table<DaySheet, string>;
@@ -80,6 +81,11 @@ export async function getDaySheet(dateStr: string): Promise<DaySheet> {
 
     if (!error && data) {
       const parsedRooms = (typeof data.rooms === 'string' ? JSON.parse(data.rooms) : data.rooms) || [];
+      parsedRooms.forEach((r: any) => {
+        if (!r.platform) {
+          r.platform = r.isAgoda ? 'Agoda' : 'Direct';
+        }
+      });
       const computedTotals = computeSheetTotals(parsedRooms);
       const sheet: DaySheet = {
         date: data.date,
@@ -162,6 +168,7 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
   const daysInMonth = new Date(year, month, 0).getDate();
 
   const sheetMap = new Map<string, DaySheet>();
+  const activePlatformsSet = new Set<string>(getBookingPlatforms());
 
   // 1. Query Supabase for this month
   try {
@@ -173,7 +180,16 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
 
     if (!error && data && data.length > 0) {
       data.forEach((row: any) => {
+        if (row.date === 'CONFIG_PLATFORMS') return;
         const rooms = (typeof row.rooms === 'string' ? JSON.parse(row.rooms) : row.rooms) || [];
+        rooms.forEach((r: any) => {
+          if (!r.platform) {
+            r.platform = r.isAgoda ? 'Agoda' : 'Direct';
+          }
+          if (r.platform && r.platform !== 'Direct') {
+            activePlatformsSet.add(r.platform);
+          }
+        });
         const totals = computeSheetTotals(rooms);
         sheetMap.set(row.date, {
           date: row.date,
@@ -194,14 +210,26 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
   // 2. If nothing from cloud, check local DB
   if (sheetMap.size === 0) {
     const allSheets = await db.sheets
-      .filter(sheet => sheet.date.startsWith(prefix))
+      .filter(sheet => sheet.date.startsWith(prefix) && sheet.date !== 'CONFIG_PLATFORMS')
       .toArray();
 
     allSheets.forEach(s => {
+      s.rooms.forEach((r: any) => {
+        if (!r.platform) {
+          r.platform = r.isAgoda ? 'Agoda' : 'Direct';
+        }
+        if (r.platform && r.platform !== 'Direct') {
+          activePlatformsSet.add(r.platform);
+        }
+      });
       s.totals = computeSheetTotals(s.rooms);
       sheetMap.set(s.date, s);
     });
   }
+
+  const activePlatforms = Array.from(activePlatformsSet);
+  const monthPlatformTotals: Record<string, number> = {};
+  activePlatforms.forEach(p => { monthPlatformTotals[p] = 0; });
 
   const days: MonthSummaryDay[] = [];
   let totalRevenue = 0;
@@ -241,6 +269,12 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
       totalBalance += t.balance;
       totalOccupancySum += t.occupiedRooms;
 
+      // Accumulate dynamic platform totals
+      activePlatforms.forEach(p => {
+        const amt = t.platformTotals?.[p] || 0;
+        monthPlatformTotals[p] = (monthPlatformTotals[p] || 0) + amt;
+      });
+
       if (!peakDay || effectiveDayTotal > peakDay.revenue) {
         peakDay = { date: dStr, revenue: effectiveDayTotal };
       }
@@ -259,10 +293,13 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
         advanceTotal: t.advanceTotal,
         tBusinessCash: t.tBusinessCash,
         agodaOnline: t.tBusinessAgoda,
+        platformTotals: t.platformTotals || {},
         otherOnline: t.tBusinessOtherOnline,
         dayTotal: effectiveDayTotal,
       });
     } else {
+      const emptyPlat: Record<string, number> = {};
+      activePlatforms.forEach(p => { emptyPlat[p] = 0; });
       days.push({
         date: dStr,
         dayNumber: d,
@@ -272,6 +309,7 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
         advanceTotal: 0,
         tBusinessCash: 0,
         agodaOnline: 0,
+        platformTotals: emptyPlat,
         otherOnline: 0,
         dayTotal: 0,
       });
@@ -297,6 +335,8 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
     totalAgoda,
     totalOtherOnline,
     totalOnline,
+    platformTotals: monthPlatformTotals,
+    activePlatforms,
     totalGst,
     totalRefund,
     totalBalance,

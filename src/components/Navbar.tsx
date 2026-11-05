@@ -1,13 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ViewMode } from '../types';
-import { Calendar, CalendarDays, BarChart3, Database } from 'lucide-react';
+import { Calendar, CalendarDays, BarChart3, Database, Globe, SlidersHorizontal } from 'lucide-react';
+import { PlatformSettingsModal } from './PlatformSettingsModal';
 
 interface NavbarProps {
   currentView: ViewMode;
   onViewChange: (view: ViewMode) => void;
+  onPlatformsChanged?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentView, onViewChange }) => {
+export const Navbar: React.FC<NavbarProps> = ({ currentView, onViewChange, onPlatformsChanged }) => {
+  const [showPlatformModal, setShowPlatformModal] = useState<boolean>(false);
+
   const navItems: { id: ViewMode; label: string; icon: React.ElementType }[] = [
     { id: 'daily', label: 'Daily Sheet', icon: Calendar },
     { id: 'monthly', label: 'Monthly Sheet', icon: CalendarDays },
@@ -17,12 +21,20 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onViewChange }) => 
 
   return (
     <>
+      <PlatformSettingsModal
+        isOpen={showPlatformModal}
+        onClose={() => setShowPlatformModal(false)}
+        onPlatformsChanged={() => {
+          if (onPlatformsChanged) onPlatformsChanged();
+        }}
+      />
+
       {/* Top Header */}
       <header className="border-b border-plaza-line bg-white/95 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-3">
           {/* Brand with New Hotel Mandala Logo */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl overflow-hidden border border-plaza-line/60 p-1 bg-white shadow-2xs shrink-0 flex items-center justify-center">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl overflow-hidden border border-plaza-line/60 p-1 bg-white shadow-2xs shrink-0 flex items-center justify-center">
               <img
                 src="/logo.png"
                 alt="Nayak's Sujay Logo"
@@ -30,7 +42,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onViewChange }) => 
               />
             </div>
             <div className="flex flex-col justify-center">
-              <div className="text-[11px] sm:text-xs font-black tracking-[0.14em] uppercase text-plaza-accent leading-tight">
+              <div className="text-[10px] sm:text-xs font-black tracking-[0.14em] uppercase text-plaza-accent leading-tight">
                 NAYAK'S SUJAY
               </div>
               <div className="text-xs sm:text-sm font-bold text-plaza-text tracking-tight flex items-center gap-1.5 mt-0.5 leading-none">
@@ -40,27 +52,40 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onViewChange }) => 
             </div>
           </div>
 
-          {/* Desktop Navigation Tabs (Hidden on mobile) */}
-          <nav className="hidden md:flex items-center gap-1 bg-plaza-card p-1 rounded-xl border border-plaza-line/50">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = currentView === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => onViewChange(item.id)}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    isActive
-                      ? 'bg-white text-plaza-text shadow-xs font-semibold'
-                      : 'text-plaza-text-3 hover:text-plaza-text'
-                  }`}
-                >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-plaza-accent' : ''}`} />
-                  {item.label}
-                </button>
-              );
-            })}
-          </nav>
+          {/* Right Action Area */}
+          <div className="flex items-center gap-2">
+            {/* Desktop Navigation Tabs (Hidden on mobile) */}
+            <nav className="hidden md:flex items-center gap-1 bg-plaza-card p-1 rounded-xl border border-plaza-line/50">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = currentView === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onViewChange(item.id)}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      isActive
+                        ? 'bg-white text-plaza-text shadow-xs font-semibold'
+                        : 'text-plaza-text-3 hover:text-plaza-text'
+                    }`}
+                  >
+                    <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-plaza-accent' : ''}`} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* Top-Right Platforms Settings Button */}
+            <button
+              onClick={() => setShowPlatformModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-plaza-line hover:border-plaza-accent/50 bg-white hover:bg-plaza-accent-tint/30 text-plaza-text text-xs font-semibold shadow-2xs transition active:scale-[0.98]"
+              title="Manage Online Platforms (Agoda, MMT, etc.)"
+            >
+              <Globe className="w-3.5 h-3.5 text-plaza-accent" />
+              <span className="hidden sm:inline">Platforms</span>
+            </button>
+          </div>
         </div>
       </header>
 

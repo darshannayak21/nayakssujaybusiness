@@ -114,8 +114,12 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
   // Maximum revenue for bar chart scaling
   const maxRevenue = Math.max(...(summary?.days.map(d => d.dayTotal) || [1]), 10000);
 
-  const agodaPercentage = summary && summary.totalRevenue > 0 
-    ? Math.round((summary.totalAgoda / summary.totalRevenue) * 100) 
+  const totalPlatformsRevenue = summary 
+    ? Object.values(summary.platformTotals || {}).reduce((a, b) => a + b, 0) || summary.totalAgoda 
+    : 0;
+
+  const platformsPercentage = summary && summary.totalRevenue > 0 
+    ? Math.round((totalPlatformsRevenue / summary.totalRevenue) * 100) 
     : 0;
 
   const cashPercentage = summary && summary.totalRevenue > 0 
@@ -195,21 +199,21 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
           </div>
         </div>
 
-        {/* Agoda Channel Share */}
+        {/* OTA Platform Channel Share */}
         <div className="bg-plaza-card rounded-2xl p-4 border border-plaza-line/40">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] font-semibold tracking-wider uppercase text-plaza-accent">
-              Agoda Booking Share
+              OTA Booking Share
             </span>
             <div className="w-6 h-6 rounded-lg bg-plaza-accent-tint flex items-center justify-center text-plaza-accent">
               <CreditCard className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="text-xl lg:text-2xl font-bold text-plaza-accent tracking-tight">
-            ₹{summary ? summary.totalAgoda.toLocaleString('en-IN') : 0}
+            ₹{totalPlatformsRevenue.toLocaleString('en-IN')}
           </div>
           <div className="text-xs text-plaza-text-3 mt-1">
-            {agodaPercentage}% of total month revenue
+            {platformsPercentage}% of total month revenue
           </div>
         </div>
 
@@ -273,11 +277,17 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
                 >
                   {/* Tooltip on hover */}
                   {hoveredDay && hoveredDay.date === day.date && (
-                    <div className="absolute -top-16 z-30 bg-[#18181b] text-white px-3 py-1.5 rounded-lg text-[10px] shadow-lg pointer-events-none whitespace-nowrap">
+                    <div className="absolute -top-20 z-30 bg-[#18181b] text-white px-3 py-1.5 rounded-lg text-[10px] shadow-lg pointer-events-none whitespace-nowrap">
                       <div className="font-bold text-white">{day.formattedDate} ({day.dayOfWeek})</div>
                       <div className="text-amber-400">Total: ₹{day.dayTotal.toLocaleString('en-IN')}</div>
-                      {day.agodaOnline > 0 && <div className="text-orange-300">Agoda: ₹{day.agodaOnline.toLocaleString('en-IN')}</div>}
+                      {Object.entries(day.platformTotals || {}).filter(([_, v]) => (v as number) > 0).map(([k, v]) => (
+                        <div key={k} className="text-orange-300">{k}: ₹{(v as number).toLocaleString('en-IN')}</div>
+                      ))}
+                      {(!day.platformTotals || Object.keys(day.platformTotals).length === 0) && day.agodaOnline > 0 && (
+                        <div className="text-orange-300">Agoda: ₹{day.agodaOnline.toLocaleString('en-IN')}</div>
+                      )}
                       {day.tBusinessCash > 0 && <div className="text-emerald-300">Cash: ₹{day.tBusinessCash.toLocaleString('en-IN')}</div>}
+                      {day.advanceTotal > 0 && <div className="text-sky-300">Advance: ₹{day.advanceTotal.toLocaleString('en-IN')}</div>}
                     </div>
                   )}
 
@@ -316,21 +326,27 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
           </p>
 
           <div className="space-y-4">
-            {/* Agoda */}
-            <div>
-              <div className="flex items-center justify-between text-xs font-semibold mb-1.5">
-                <span className="text-plaza-accent flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-plaza-accent"></span>
-                  Agoda Bookings
-                </span>
-                <span className="text-plaza-text">
-                  ₹{summary?.totalAgoda.toLocaleString('en-IN')} ({agodaPercentage}%)
-                </span>
-              </div>
-              <div className="w-full h-2 rounded-full bg-plaza-card overflow-hidden">
-                <div style={{ width: `${agodaPercentage}%` }} className="h-full bg-plaza-accent rounded-full transition-all duration-500"></div>
-              </div>
-            </div>
+            {/* OTA Platforms */}
+            {(summary?.activePlatforms || ['Agoda']).map(plat => {
+              const pAmt = summary?.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? summary?.totalAgoda || 0 : 0);
+              const pPct = summary && summary.totalRevenue > 0 ? Math.round((pAmt / summary.totalRevenue) * 100) : 0;
+              return (
+                <div key={plat}>
+                  <div className="flex items-center justify-between text-xs font-semibold mb-1.5">
+                    <span className="text-plaza-accent flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-plaza-accent"></span>
+                      {plat} Bookings
+                    </span>
+                    <span className="text-plaza-text">
+                      ₹{pAmt.toLocaleString('en-IN')} ({pPct}%)
+                    </span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-plaza-card overflow-hidden">
+                    <div style={{ width: `${pPct}%` }} className="h-full bg-plaza-accent rounded-full transition-all duration-500"></div>
+                  </div>
+                </div>
+              );
+            })}
 
             {/* Desk Cash */}
             <div>

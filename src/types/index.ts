@@ -2,8 +2,9 @@ export interface RoomEntry {
   slNo: number;
   roomNumber: string;
   floor: 1 | 2 | 3;
-  customerName: string; // If entered, considered as Agoda booking
-  isAgoda: boolean;     // Automatically true when customerName is present
+  customerName: string;
+  platform: string;     // 'Direct' | 'Agoda' | 'MMT' | etc. Default: 'Direct'
+  isAgoda?: boolean;    // retained for backward compatibility (platform === 'Agoda')
   roomRent: number | '';
   advanceCash: number | '';
   advanceOnline: number | '';
@@ -25,15 +26,16 @@ export interface DaySheetTotals {
   advanceOnline: number;
   advanceTotal: number; // Combined advance (cash + online)
   tBusinessCash: number;
-  tBusinessAgoda: number; // Total online business for Agoda bookings (with customer name)
+  tBusinessAgoda: number; // For backward compatibility
   tBusinessOtherOnline: number; // Total online business for direct/other guests
-  tBusinessOnline: number; // Total online business (Agoda + Others)
+  tBusinessOnline: number; // Total online business across all channels
+  platformTotals: Record<string, number>; // Dynamic totals per online platform: { Agoda: 15000, MMT: 8000 }
   tBusinessTotal: number;
   gst5: number;
   balance: number;
   refund: number;
-  total: number; // Standard table total
-  dayTotal: number; // Combined day total: advanceTotal + tBusinessCash + tBusinessAgoda + tBusinessOtherOnline
+  total: number;
+  dayTotal: number; // Advance + Cash + sum(all online platforms) + Other Online
   netCash: number;
   netOnline: number;
   totalCollections: number;
@@ -41,6 +43,7 @@ export interface DaySheetTotals {
   vacantRooms: number;
   checkedOutRooms: number;
   agodaBookingsCount: number;
+  platformBookingsCount: Record<string, number>;
 }
 
 export interface DaySheet {
@@ -64,6 +67,7 @@ export interface MonthSummaryDay {
   advanceTotal: number;
   tBusinessCash: number;
   agodaOnline: number;
+  platformTotals: Record<string, number>;
   otherOnline: number;
   dayTotal: number;
 }
@@ -81,6 +85,8 @@ export interface MonthSummary {
   totalAgoda: number;
   totalOtherOnline: number;
   totalOnline: number;
+  platformTotals: Record<string, number>;
+  activePlatforms: string[]; // Dynamic list of platforms (e.g. ['Agoda', 'MMT'])
   totalGst: number;
   totalRefund: number;
   totalBalance: number;

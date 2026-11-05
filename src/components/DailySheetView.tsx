@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -10,12 +10,14 @@ import {
   Banknote, 
   BedDouble,
   LayoutList,
-  Table as TableIcon
+  Table as TableIcon,
+  Globe
 } from 'lucide-react';
 import { DaySheet, RoomEntry } from '../types';
 import { calculateRoomTotal, computeSheetTotals } from '../data/rooms';
 import { formatDateForDisplay } from '../services/db';
 import { generateDailyPDF } from '../services/pdfGenerator';
+import { getBookingPlatforms } from '../services/platforms';
 
 interface DailySheetViewProps {
   sheet: DaySheet;
@@ -31,6 +33,13 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
   const [mobileMode, setMobileMode] = useState<'table' | 'cards'>('table');
   const [selectedFloor, setSelectedFloor] = useState<number | 'all'>('all');
+  const [platforms, setPlatforms] = useState<string[]>(getBookingPlatforms());
+
+  useEffect(() => {
+    const handler = () => setPlatforms(getBookingPlatforms());
+    window.addEventListener('plaza_platforms_updated', handler);
+    return () => window.removeEventListener('plaza_platforms_updated', handler);
+  }, []);
 
   const { dayStr, monthStr, yearStr } = formatDateForDisplay(sheet.date);
 
@@ -70,20 +79,23 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
 
     if (field === 'customerName') {
       room.customerName = value;
-      if (value && value.trim().length > 0) {
-        room.isAgoda = true;
+      room.total = calculateRoomTotal(room);
+    } else if (field === 'platform') {
+      room.platform = value;
+      const isOnline = Boolean(value && value !== 'Direct');
+      room.isAgoda = Boolean(value && value.toLowerCase() === 'agoda');
+      if (isOnline) {
         room.advanceCash = '';
         room.advanceOnline = '';
         if (room.roomRent && room.tBusinessOnline === '' && room.tBusinessCash === '') {
           room.tBusinessOnline = room.roomRent;
         }
-      } else {
-        room.isAgoda = false;
       }
       room.total = calculateRoomTotal(room);
     } else if (field === 'isAgoda') {
       room.isAgoda = Boolean(value);
       if (value) {
+        room.platform = 'Agoda';
         room.advanceCash = '';
         room.advanceOnline = '';
       }
@@ -102,7 +114,8 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
       const numVal = value === '' ? '' : parseFloat(value);
       (room as any)[field] = isNaN(numVal as number) ? '' : numVal;
 
-      if (field === 'roomRent' && room.isAgoda && room.tBusinessOnline === '' && room.tBusinessCash === '' && typeof numVal === 'number') {
+      const isOnline = Boolean(room.platform && room.platform !== 'Direct');
+      if (field === 'roomRent' && isOnline && room.tBusinessOnline === '' && room.tBusinessCash === '' && typeof numVal === 'number') {
         room.tBusinessOnline = numVal;
       }
 
@@ -264,21 +277,21 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
           </div>
         </div>
 
-        {/* Card 3: Online (Agoda) */}
+        {/* Card 3: Online Platforms */}
         <div className="bg-plaza-card rounded-2xl p-3 sm:p-4 border border-plaza-line/40">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[9px] sm:text-[10px] font-semibold tracking-wider uppercase text-plaza-accent">
-              Online (Agoda)
+              Online (OTAs)
             </span>
             <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-plaza-accent-tint text-plaza-accent font-bold">
-              {sheet.totals.agodaBookingsCount}
+              {Object.values(sheet.totals.platformBookingsCount || {}).reduce((a, b) => a + b, 0)} Bookings
             </span>
           </div>
           <div className="text-lg sm:text-2xl font-bold text-plaza-accent tracking-tight">
-            ₹{sheet.totals.tBusinessAgoda.toLocaleString('en-IN')}
+            ₹{Object.values(sheet.totals.platformTotals || {}).reduce((a, b) => a + b, 0).toLocaleString('en-IN')}
           </div>
           <div className="text-[10px] text-plaza-text-3 mt-0.5 truncate">
-            Guest names attached
+            {Object.entries(sheet.totals.platformTotals || {}).filter(([_, v]) => v > 0).map(([k, v]) => `${k}: ₹${v.toLocaleString('en-IN')}`).join(', ') || 'Agoda, MMT, etc.'}
           </div>
         </div>
 
@@ -286,7 +299,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
         <div className="bg-plaza-card rounded-2xl p-3 sm:p-4 border border-plaza-line/40">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[9px] sm:text-[10px] font-semibold tracking-wider uppercase text-plaza-text-3">
-              Online (Others)
+              Direct Online
             </span>
             <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-white border border-plaza-line/50 flex items-center justify-center text-plaza-text-3">
               <CreditCard className="w-3 h-3" />
@@ -350,12 +363,14 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
           </div>
 
           {filteredRooms.map((room) => {
-            const isAgoda = room.isAgoda || (room.customerName && room.customerName.trim().length > 0);
+            const isOnlinePlatform = Boolean(room.platform && room.platform !== 'Direct');
+            const platformLabel = isOnlinePlatform ? room.platform : '';
+
             return (
               <div
                 key={room.roomNumber}
                 className={`bg-white rounded-2xl border p-4 shadow-2xs transition-all ${
-                  isAgoda ? 'border-plaza-accent/50' : 'border-plaza-line/60'
+                  isOnlinePlatform ? 'border-plaza-accent/50 bg-amber-50/10' : 'border-plaza-line/60'
                 }`}
               >
                 <div className="flex items-center justify-between border-b border-plaza-line/30 pb-2 mb-3">
@@ -367,29 +382,50 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       Floor {room.floor}
                     </span>
                   </div>
-                  {isAgoda ? (
-                    <span className="px-2 py-0.5 rounded-full bg-plaza-accent text-white text-[9px] font-bold tracking-wider uppercase">
-                      Agoda
+                  {isOnlinePlatform ? (
+                    <span className="px-2.5 py-0.5 rounded-full bg-plaza-accent text-white text-[10px] font-bold tracking-wider uppercase shadow-2xs">
+                      {platformLabel}
                     </span>
                   ) : (
                     <span className="text-[10px] text-plaza-text-4 font-mono">
-                      #{room.slNo}
+                      #{room.slNo} · Direct
                     </span>
                   )}
                 </div>
 
                 <div className="space-y-2.5 text-xs">
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-plaza-text-3 block mb-1">
-                      Customer Name (Auto-Tags Agoda)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Abhishek Joshi"
-                      value={room.customerName}
-                      onChange={(e) => handleFieldChange(room.originalIndex, 'customerName', e.target.value)}
-                      className="w-full px-2.5 py-1.5 rounded-xl border border-plaza-line focus:border-plaza-accent focus:outline-none font-medium text-xs"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-plaza-text-3 block mb-1">
+                        Customer Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Abhishek Joshi"
+                        value={room.customerName}
+                        onChange={(e) => handleFieldChange(room.originalIndex, 'customerName', e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-xl border border-plaza-line focus:border-plaza-accent focus:outline-none font-medium text-xs bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-plaza-text-3 block mb-1">
+                        Platform / Source
+                      </label>
+                      <select
+                        value={room.platform || 'Direct'}
+                        onChange={(e) => handleFieldChange(room.originalIndex, 'platform', e.target.value)}
+                        className={`w-full px-2.5 py-1.5 rounded-xl border focus:outline-none font-bold text-xs transition ${
+                          isOnlinePlatform 
+                            ? 'bg-plaza-accent-tint text-plaza-accent border-plaza-accent' 
+                            : 'bg-white text-plaza-text border-plaza-line'
+                        }`}
+                      >
+                        <option value="Direct">Direct / Walk-in</option>
+                        {platforms.map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
@@ -406,8 +442,8 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       />
                     </div>
                     <div>
-                      <label className={`text-[10px] uppercase font-bold block mb-1 ${isAgoda ? 'text-plaza-accent' : 'text-plaza-text-3'}`}>
-                        {isAgoda ? 'Agoda Amount' : 'Online Amount'}
+                      <label className={`text-[10px] uppercase font-bold block mb-1 ${isOnlinePlatform ? 'text-plaza-accent' : 'text-plaza-text-3'}`}>
+                        {isOnlinePlatform ? `${platformLabel} Amount` : 'Online Amount'}
                       </label>
                       <input
                         type="number"
@@ -415,13 +451,13 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         value={room.tBusinessOnline}
                         onChange={(e) => handleFieldChange(room.originalIndex, 'tBusinessOnline', e.target.value)}
                         className={`w-full text-right px-2.5 py-1.5 rounded-xl border focus:outline-none font-medium text-xs ${
-                          isAgoda ? 'border-plaza-accent bg-amber-50/40 text-plaza-accent font-bold' : 'border-plaza-line'
+                          isOnlinePlatform ? 'border-plaza-accent bg-amber-50/40 text-plaza-accent font-bold' : 'border-plaza-line'
                         }`}
                       />
                     </div>
                   </div>
 
-                  {!isAgoda && (
+                  {!isOnlinePlatform && (
                     <div className="grid grid-cols-3 gap-2 pt-1 border-t border-plaza-line/30">
                       <div>
                         <label className="text-[9px] uppercase font-bold text-plaza-text-3 block mb-0.5">
@@ -581,8 +617,11 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                   <th rowSpan={2} className="border-r border-plaza-line p-2 text-center w-24">
                     ROOM<br/>RENT
                   </th>
-                  <th rowSpan={2} className="border-r border-plaza-line p-2 text-left w-48">
+                  <th rowSpan={2} className="border-r border-plaza-line p-2 text-left w-40">
                     CUSTOMER NAME
+                  </th>
+                  <th rowSpan={2} className="border-r border-plaza-line p-2 text-left w-28">
+                    PLATFORM
                   </th>
                   
                   {/* ADVANCE GROUP HEADER */}
@@ -630,7 +669,8 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
               <tbody>
                 {sheet.rooms.map((room, idx) => {
                   const isNewFloor = idx === 0 || idx === 10 || idx === 23;
-                  const isAgoda = room.isAgoda || (room.customerName && room.customerName.trim().length > 0);
+                  const isOnlinePlatform = Boolean(room.platform && room.platform !== 'Direct');
+                  const platformLabel = isOnlinePlatform ? room.platform : '';
 
                   return (
                     <tr
@@ -662,26 +702,37 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
 
                       {/* CUSTOMER NAME */}
                       <td className="border-r border-plaza-line p-1">
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="text"
-                            placeholder="Guest name (Agoda)"
-                            value={room.customerName}
-                            onChange={(e) => handleFieldChange(idx, 'customerName', e.target.value)}
-                            className="w-full px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none text-[12px] font-medium transition"
-                          />
-                          {isAgoda && (
-                            <span className="shrink-0 px-2 py-0.5 rounded-full bg-plaza-accent-tint text-plaza-accent font-bold text-[9px] tracking-wider uppercase border border-plaza-accent-line">
-                              Agoda
-                            </span>
-                          )}
-                        </div>
+                        <input
+                          type="text"
+                          placeholder="Guest name"
+                          value={room.customerName}
+                          onChange={(e) => handleFieldChange(idx, 'customerName', e.target.value)}
+                          className="w-full px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none text-[12px] font-medium transition"
+                        />
                       </td>
 
-                      {/* ADVANCE CASH (Disabled for Agoda) */}
-                      <td className={`border-r border-plaza-line p-1 ${isAgoda ? 'bg-plaza-card/40' : ''}`}>
-                        {isAgoda ? (
-                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none" title="Agoda bookings have no advance">
+                      {/* PLATFORM / SOURCE DROPDOWN */}
+                      <td className="border-r border-plaza-line p-1">
+                        <select
+                          value={room.platform || 'Direct'}
+                          onChange={(e) => handleFieldChange(idx, 'platform', e.target.value)}
+                          className={`w-full text-[11px] font-semibold py-1 px-1.5 rounded-md border transition cursor-pointer focus:outline-none focus:border-plaza-accent ${
+                            isOnlinePlatform 
+                              ? 'bg-plaza-accent-tint text-plaza-accent border-plaza-accent font-bold' 
+                              : 'bg-white text-plaza-text-3 border-plaza-line/60 hover:border-plaza-line'
+                          }`}
+                        >
+                          <option value="Direct">Direct</option>
+                          {platforms.map((p) => (
+                            <option key={p} value={p}>{p}</option>
+                          ))}
+                        </select>
+                      </td>
+
+                      {/* ADVANCE CASH (Disabled for online platforms) */}
+                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform ? 'bg-plaza-card/40' : ''}`}>
+                        {isOnlinePlatform ? (
+                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none" title={`${platformLabel} bookings have no advance`}>
                             —
                           </div>
                         ) : (
@@ -695,10 +746,10 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         )}
                       </td>
 
-                      {/* ADVANCE ONLINE (Disabled for Agoda) */}
-                      <td className={`border-r border-plaza-line p-1 ${isAgoda ? 'bg-plaza-card/40' : ''}`}>
-                        {isAgoda ? (
-                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none" title="Agoda bookings have no advance">
+                      {/* ADVANCE ONLINE (Disabled for online platforms) */}
+                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform ? 'bg-plaza-card/40' : ''}`}>
+                        {isOnlinePlatform ? (
+                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none" title={`${platformLabel} bookings have no advance`}>
                             —
                           </div>
                         ) : (
@@ -723,15 +774,15 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         />
                       </td>
 
-                      {/* T. BUSINESS ONLINE (Agoda amount when name is attached) */}
-                      <td className={`border-r border-plaza-line p-1 ${isAgoda ? 'bg-amber-50/50' : ''}`}>
+                      {/* T. BUSINESS ONLINE */}
+                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform ? 'bg-amber-50/50' : ''}`}>
                         <input
                           type="number"
-                          placeholder={isAgoda ? "Agoda ₹" : "—"}
+                          placeholder={isOnlinePlatform ? `${platformLabel} ₹` : "—"}
                           value={room.tBusinessOnline}
                           onChange={(e) => handleFieldChange(idx, 'tBusinessOnline', e.target.value)}
                           className={`w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none font-medium transition ${
-                            isAgoda ? 'text-plaza-accent font-bold placeholder:text-plaza-accent/60' : 'text-plaza-text'
+                            isOnlinePlatform ? 'text-plaza-accent font-bold placeholder:text-plaza-accent/60' : 'text-plaza-text'
                           }`}
                         />
                       </td>
@@ -802,8 +853,11 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                   <td className="border-r border-plaza-line py-3 px-2 text-right">
                     {sheet.totals.roomRent > 0 ? `₹${sheet.totals.roomRent.toLocaleString('en-IN')}` : '—'}
                   </td>
-                  <td className="border-r border-plaza-line py-3 px-2 text-left text-xs text-plaza-accent">
-                    {sheet.totals.agodaBookingsCount > 0 ? `${sheet.totals.agodaBookingsCount} Agoda Bookings` : '—'}
+                  <td className="border-r border-plaza-line py-3 px-2 text-left text-xs text-plaza-text-3">
+                    {sheet.rooms.filter(r => r.customerName).length > 0 ? `${sheet.rooms.filter(r => r.customerName).length} Guests` : '—'}
+                  </td>
+                  <td className="border-r border-plaza-line py-3 px-2 text-center text-xs text-plaza-accent font-semibold">
+                    {Object.values(sheet.totals.platformBookingsCount || {}).reduce((a, b) => a + b, 0)} OTA Bookings
                   </td>
                   <td className="border-r border-plaza-line py-3 px-2 text-right">
                     {sheet.totals.advanceCash > 0 ? `₹${sheet.totals.advanceCash.toLocaleString('en-IN')}` : '—'}

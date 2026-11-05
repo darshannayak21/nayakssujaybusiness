@@ -170,17 +170,23 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
             </div>
           </div>
 
-          <div className="bg-plaza-card rounded-2xl p-4 border border-plaza-line/40">
-            <span className="text-[10px] font-semibold tracking-wider uppercase text-plaza-accent">
-              Total Online (Agoda)
-            </span>
-            <div className="text-xl lg:text-2xl font-bold text-plaza-accent tracking-tight mt-1.5">
-              ₹{summary.totalAgoda.toLocaleString('en-IN')}
-            </div>
-            <div className="text-[11px] text-plaza-text-3 mt-1">
-              Bookings with guest names
-            </div>
-          </div>
+          {/* Dynamic Platform Cards */}
+          {(summary.activePlatforms || ['Agoda']).map((plat) => {
+            const tot = summary.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? summary.totalAgoda : 0);
+            return (
+              <div key={plat} className="bg-plaza-card rounded-2xl p-4 border border-plaza-line/40">
+                <span className="text-[10px] font-semibold tracking-wider uppercase text-plaza-accent">
+                  Total Online ({plat})
+                </span>
+                <div className="text-xl lg:text-2xl font-bold text-plaza-accent tracking-tight mt-1.5">
+                  ₹{tot.toLocaleString('en-IN')}
+                </div>
+                <div className="text-[11px] text-plaza-text-3 mt-1">
+                  Bookings via {plat}
+                </div>
+              </div>
+            );
+          })}
 
           <div className="bg-plaza-card rounded-2xl p-4 border border-plaza-line/40">
             <span className="text-[10px] font-semibold tracking-wider uppercase text-plaza-text-3">
@@ -196,21 +202,25 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
         </div>
       )}
 
-      {/* Main Content: Exact Table Format from Image 1 */}
+      {/* Main Content: Exact Table Format from Image 1 - Horizontal Landscape */}
       {activeTab === 'table' && summary && (
         <div className="bg-white rounded-2xl border border-plaza-line shadow-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full text-left text-xs border-collapse min-w-[950px]">
               <thead>
                 <tr className="bg-plaza-card border-b border-plaza-line text-[10px] uppercase font-bold text-plaza-text">
-                  <th className="p-3 text-center w-16">SR. NO.</th>
-                  <th className="p-3 text-center w-28">DATE</th>
+                  <th className="p-3 text-center w-14">SR. NO.</th>
+                  <th className="p-3 text-center w-24">DATE</th>
                   <th className="p-3 text-right">ADVANCE</th>
                   <th className="p-3 text-right">CASH</th>
-                  <th className="p-3 text-right text-plaza-accent">ONLINE (AGODA)</th>
-                  <th className="p-3 text-right">ONLINE (OTHERS)</th>
-                  <th className="p-3 text-right font-bold text-plaza-text">(DAY TOTAL)</th>
-                  <th className="p-3 text-center w-24">ACTIONS</th>
+                  {(summary.activePlatforms || ['Agoda']).map((plat) => (
+                    <th key={plat} className="p-3 text-right text-plaza-accent whitespace-nowrap">
+                      ONLINE ({plat.toUpperCase()})
+                    </th>
+                  ))}
+                  <th className="p-3 text-right whitespace-nowrap">ONLINE (OTHERS)</th>
+                  <th className="p-3 text-right font-bold text-plaza-text whitespace-nowrap">(DAY TOTAL)</th>
+                  <th className="p-3 text-center w-20">ACTIONS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-plaza-line/50">
@@ -233,9 +243,14 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
                       <td className="p-3 text-right text-plaza-text-2">
                         {day.tBusinessCash > 0 ? `₹${day.tBusinessCash.toLocaleString('en-IN')}` : '—'}
                       </td>
-                      <td className="p-3 text-right font-semibold text-plaza-accent">
-                        {day.agodaOnline > 0 ? `₹${day.agodaOnline.toLocaleString('en-IN')}` : '—'}
-                      </td>
+                      {(summary.activePlatforms || ['Agoda']).map((plat) => {
+                        const amt = day.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? day.agodaOnline : 0);
+                        return (
+                          <td key={plat} className="p-3 text-right font-semibold text-plaza-accent">
+                            {amt > 0 ? `₹${amt.toLocaleString('en-IN')}` : '—'}
+                          </td>
+                        );
+                      })}
                       <td className="p-3 text-right text-plaza-text-2">
                         {day.otherOnline > 0 ? `₹${day.otherOnline.toLocaleString('en-IN')}` : '—'}
                       </td>
@@ -276,9 +291,14 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
                   <td className="p-3 text-right">
                     {summary.totalCash > 0 ? `₹${summary.totalCash.toLocaleString('en-IN')}` : '—'}
                   </td>
-                  <td className="p-3 text-right text-plaza-accent font-bold">
-                    {summary.totalAgoda > 0 ? `₹${summary.totalAgoda.toLocaleString('en-IN')}` : '—'}
-                  </td>
+                  {(summary.activePlatforms || ['Agoda']).map((plat) => {
+                    const tot = summary.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? summary.totalAgoda : 0);
+                    return (
+                      <td key={plat} className="p-3 text-right text-plaza-accent font-bold">
+                        {tot > 0 ? `₹${tot.toLocaleString('en-IN')}` : '—'}
+                      </td>
+                    );
+                  })}
                   <td className="p-3 text-right">
                     {summary.totalOtherOnline > 0 ? `₹${summary.totalOtherOnline.toLocaleString('en-IN')}` : '—'}
                   </td>
