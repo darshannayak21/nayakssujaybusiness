@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ViewMode } from '../types';
-import { Calendar, CalendarDays, BarChart3, Database, Globe, SlidersHorizontal } from 'lucide-react';
+import { Calendar, CalendarDays, BarChart3, Database, Globe, Menu, X } from 'lucide-react';
 import { PlatformSettingsModal } from './PlatformSettingsModal';
 
 interface NavbarProps {
@@ -11,13 +11,19 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ currentView, onViewChange, onPlatformsChanged }) => {
   const [showPlatformModal, setShowPlatformModal] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  const navItems: { id: ViewMode; label: string; icon: React.ElementType }[] = [
-    { id: 'daily', label: 'Daily Sheet', icon: Calendar },
-    { id: 'monthly', label: 'Monthly Sheet', icon: CalendarDays },
-    { id: 'analytics', label: 'Month Analytics', icon: BarChart3 },
-    { id: 'backup', label: 'Data Backup', icon: Database },
+  const navItems: { id: ViewMode; label: string; description: string; icon: React.ElementType }[] = [
+    { id: 'daily', label: 'Daily Sheet', description: 'Rooms 101 – 303 Ledger', icon: Calendar },
+    { id: 'monthly', label: 'Monthly Sheet', description: 'Full Month Business Statement', icon: CalendarDays },
+    { id: 'analytics', label: 'Month Analytics', description: 'Revenue & Occupancy Insights', icon: BarChart3 },
+    { id: 'backup', label: 'Data Backup', description: 'Cloud Sync & Offline Backups', icon: Database },
   ];
+
+  const handleMobileNavClick = (view: ViewMode) => {
+    onViewChange(view);
+    setIsMobileMenuOpen(false);
+  };
 
   return (
     <>
@@ -85,8 +91,78 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onViewChange, onPla
               <Globe className="w-3.5 h-3.5 text-plaza-accent" />
               <span className="hidden sm:inline">Platforms</span>
             </button>
+
+            {/* Mobile Hamburger Menu Icon Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="md:hidden flex items-center justify-center w-9 h-9 rounded-xl border border-plaza-line bg-white hover:bg-plaza-card text-plaza-text transition active:scale-95 shadow-2xs"
+              aria-label="Toggle navigation menu"
+            >
+              {isMobileMenuOpen ? (
+                <X className="w-5 h-5 text-plaza-accent" />
+              ) : (
+                <Menu className="w-5 h-5 text-plaza-text" />
+              )}
+            </button>
           </div>
         </div>
+
+        {/* Mobile Hamburger Dropdown Menu */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden border-t border-plaza-line/60 bg-white/98 backdrop-blur-md px-4 py-3 shadow-xl animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-plaza-text-4 px-2 block mb-1">
+                Navigation Menu
+              </span>
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = currentView === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleMobileNavClick(item.id)}
+                    className={`w-full flex items-center justify-between p-3 rounded-xl transition text-left ${
+                      isActive
+                        ? 'bg-plaza-accent-tint text-plaza-accent font-bold border border-plaza-accent-line/70'
+                        : 'hover:bg-plaza-card text-plaza-text'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isActive ? 'bg-plaza-accent text-white' : 'bg-plaza-card text-plaza-text-3'}`}>
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold leading-tight">{item.label}</div>
+                        <div className="text-[11px] text-plaza-text-3 leading-tight mt-0.5">{item.description}</div>
+                      </div>
+                    </div>
+                    {isActive && (
+                      <span className="w-2 h-2 rounded-full bg-plaza-accent"></span>
+                    )}
+                  </button>
+                );
+              })}
+
+              <div className="pt-2 border-t border-plaza-line/40">
+                <button
+                  onClick={() => {
+                    setShowPlatformModal(true);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-plaza-card text-plaza-text text-left transition"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-amber-50 text-plaza-accent flex items-center justify-center">
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold leading-tight">Booking Platforms</div>
+                    <div className="text-[11px] text-plaza-text-3 leading-tight mt-0.5">Manage Agoda, MMT, Booking.com</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Mobile Bottom Navigation Bar (Visible only on mobile devices) */}
