@@ -69,16 +69,20 @@ export function createInitialRooms(): RoomEntry[] {
 }
 
 export function calculateRoomTotal(room: RoomEntry): number | '' {
-  const cash = typeof room.tBusinessCash === 'number' ? room.tBusinessCash : 0;
-  const online = typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : 0;
+  const advCash = typeof room.advanceCash === 'number' ? room.advanceCash : 0;
+  const advOnline = typeof room.advanceOnline === 'number' ? room.advanceOnline : 0;
+  const tbCash = typeof room.tBusinessCash === 'number' ? room.tBusinessCash : 0;
+  const tbOnline = typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : 0;
   
-  if (room.tBusinessCash !== '' || room.tBusinessOnline !== '') {
-    return cash + online;
-  }
+  const hasPayment = (
+    room.advanceCash !== '' || 
+    room.advanceOnline !== '' || 
+    room.tBusinessCash !== '' || 
+    room.tBusinessOnline !== ''
+  );
 
-  if (typeof room.roomRent === 'number' && room.roomRent > 0) {
-    const gst = typeof room.gst5 === 'number' ? room.gst5 : 0;
-    return room.roomRent + gst;
+  if (hasPayment) {
+    return advCash + advOnline + tbCash + tbOnline;
   }
 
   return '';
@@ -134,6 +138,7 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
     if (typeof r.gst5 === 'number') gst5 += r.gst5;
     if (typeof r.balance === 'number') balance += r.balance;
     if (typeof r.refund === 'number') refund += r.refund;
+    r.total = calculateRoomTotal(r);
     if (typeof r.total === 'number') total += r.total;
 
     // Strict occupancy determination:

@@ -353,6 +353,16 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
             const isOnlinePlatform = Boolean(room.platform && room.platform !== 'Direct');
             const platformLabel = isOnlinePlatform ? room.platform : '';
 
+            const cardRentVal = typeof room.roomRent === 'number' ? room.roomRent : 0;
+            const cardAdvCash = typeof room.advanceCash === 'number' ? room.advanceCash : 0;
+            const cardAdvOnline = typeof room.advanceOnline === 'number' ? room.advanceOnline : 0;
+            const cardTBCash = typeof room.tBusinessCash === 'number' ? room.tBusinessCash : 0;
+            const cardTBOnline = typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : 0;
+            const cardTotalAdv = cardAdvCash + cardAdvOnline;
+            const cardTotalTB = cardTBCash + cardTBOnline;
+            const cardRemaining = cardRentVal - cardTotalAdv - cardTotalTB;
+            const cardShowHint = cardRentVal > 0 && cardTotalAdv > 0 && cardRemaining > 0;
+
             return (
               <div
                 key={room.roomNumber}
@@ -368,6 +378,11 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                     <span className="text-[10px] uppercase font-bold text-plaza-text-3">
                       Floor {room.floor}
                     </span>
+                    {room.total && typeof room.total === 'number' && room.total > 0 && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        Paid: ₹{room.total}
+                      </span>
+                    )}
                   </div>
                   {isOnlinePlatform ? (
                     <span className="px-2.5 py-0.5 rounded-full bg-plaza-accent text-white text-[10px] font-bold tracking-wider uppercase shadow-2xs">
@@ -434,13 +449,24 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       </label>
                       <input
                         type="number"
-                        placeholder="₹ 0"
+                        placeholder={
+                          isOnlinePlatform 
+                            ? `${platformLabel} ₹` 
+                            : cardShowHint && room.tBusinessOnline === '' && room.tBusinessCash === '' 
+                            ? `${cardRemaining} left` 
+                            : "₹ 0"
+                        }
                         value={room.tBusinessOnline}
                         onChange={(e) => handleFieldChange(room.originalIndex, 'tBusinessOnline', e.target.value)}
                         className={`w-full text-right px-2.5 py-1.5 rounded-xl border focus:outline-none font-medium text-xs ${
                           isOnlinePlatform ? 'border-plaza-accent bg-amber-50/40 text-plaza-accent font-bold' : 'border-plaza-line'
                         }`}
                       />
+                      {cardShowHint && (
+                        <div className="text-[9.5px] font-semibold text-rose-500 text-right mt-0.5">
+                          {cardRemaining} left
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -476,11 +502,16 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         </label>
                         <input
                           type="number"
-                          placeholder="₹ 0"
+                          placeholder={cardShowHint && room.tBusinessCash === '' && room.tBusinessOnline === '' ? `${cardRemaining} left` : "₹ 0"}
                           value={room.tBusinessCash}
                           onChange={(e) => handleFieldChange(room.originalIndex, 'tBusinessCash', e.target.value)}
                           className="w-full text-right px-2 py-1 rounded-lg border border-plaza-line text-xs"
                         />
+                        {cardShowHint && (
+                          <div className="text-[9.5px] font-semibold text-rose-500 text-right mt-0.5">
+                            {cardRemaining} left
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -637,7 +668,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                     REFUND
                   </th>
                   <th rowSpan={2} className="border-r border-plaza-line p-2 text-center w-24 font-bold text-plaza-text">
-                    TOTAL
+                    PAID
                   </th>
                   <th rowSpan={2} className="p-2 text-center w-24">
                     CHECK<br/>OUT
@@ -658,6 +689,17 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                   const isNewFloor = idx === 0 || idx === 10 || idx === 23;
                   const isOnlinePlatform = Boolean(room.platform && room.platform !== 'Direct');
                   const platformLabel = isOnlinePlatform ? room.platform : '';
+
+                  const rentVal = typeof room.roomRent === 'number' ? room.roomRent : 0;
+                  const advCashVal = typeof room.advanceCash === 'number' ? room.advanceCash : 0;
+                  const advOnlineVal = typeof room.advanceOnline === 'number' ? room.advanceOnline : 0;
+                  const tbCashVal = typeof room.tBusinessCash === 'number' ? room.tBusinessCash : 0;
+                  const tbOnlineVal = typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : 0;
+
+                  const totalAdvancePaid = advCashVal + advOnlineVal;
+                  const totalTBPaid = tbCashVal + tbOnlineVal;
+                  const remainingLeft = rentVal - totalAdvancePaid - totalTBPaid;
+                  const showLeftHint = rentVal > 0 && totalAdvancePaid > 0 && remainingLeft > 0;
 
                   return (
                     <tr
@@ -754,24 +796,40 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       <td className="border-r border-plaza-line p-1">
                         <input
                           type="number"
-                          placeholder="—"
+                          placeholder={showLeftHint && room.tBusinessCash === '' && room.tBusinessOnline === '' ? `${remainingLeft} left` : "—"}
                           value={room.tBusinessCash}
                           onChange={(e) => handleFieldChange(idx, 'tBusinessCash', e.target.value)}
                           className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none font-medium text-plaza-text transition"
                         />
+                        {showLeftHint && (
+                          <div className="text-[9.5px] font-semibold text-rose-500 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
+                            {remainingLeft} left
+                          </div>
+                        )}
                       </td>
 
                       {/* T. BUSINESS ONLINE */}
                       <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform ? 'bg-amber-50/50' : ''}`}>
                         <input
                           type="number"
-                          placeholder={isOnlinePlatform ? `${platformLabel} ₹` : "—"}
+                          placeholder={
+                            isOnlinePlatform 
+                              ? `${platformLabel} ₹` 
+                              : showLeftHint && room.tBusinessCash === '' && room.tBusinessOnline === '' 
+                              ? `${remainingLeft} left` 
+                              : "—"
+                          }
                           value={room.tBusinessOnline}
                           onChange={(e) => handleFieldChange(idx, 'tBusinessOnline', e.target.value)}
                           className={`w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none font-medium transition ${
                             isOnlinePlatform ? 'text-plaza-accent font-bold placeholder:text-plaza-accent/60' : 'text-plaza-text'
                           }`}
                         />
+                        {showLeftHint && (
+                          <div className="text-[9.5px] font-semibold text-rose-500 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
+                            {remainingLeft} left
+                          </div>
+                        )}
                       </td>
 
                       {/* GST (Manual entry) */}

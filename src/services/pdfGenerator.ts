@@ -154,7 +154,7 @@ export function generateDailyPDF(sheet: DaySheet) {
       { content: 'GST', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
       { content: 'BALANCE', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
       { content: 'REFUND', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
-      { content: 'TOTAL', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
+      { content: 'PAID', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
       { content: 'CHECK\nOUT', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
     ],
     [
