@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import { DaySheet, MonthSummary, MonthSummaryDay } from '../types';
+import { DaySheet, MonthSummary, MonthSummaryDay, MonthPerformance, YearSummary } from '../types';
 import { ROOM_DEFINITIONS, createInitialRooms, computeSheetTotals } from '../data/rooms';
 import { supabase } from './supabase';
 import { getBookingPlatforms } from './platforms';
@@ -345,6 +345,61 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
     peakOccupancyDay,
     averageOccupancyRate,
     days,
+  };
+}
+
+export async function getYearSummary(year: number): Promise<YearSummary> {
+  const monthPromises = Array.from({ length: 12 }, (_, i) => getMonthSummary(year, i + 1));
+  const monthSummaries = await Promise.all(monthPromises);
+
+  const activePlatformsSet = new Set<string>();
+  let totalRevenue = 0;
+  let totalCash = 0;
+  let totalAdvance = 0;
+  let totalOnline = 0;
+  let totalOtherOnline = 0;
+  let totalRecordedDays = 0;
+
+  const months: MonthPerformance[] = monthSummaries.map((ms) => {
+    ms.activePlatforms.forEach(p => activePlatformsSet.add(p));
+    totalRevenue += ms.totalRevenue;
+    totalCash += ms.totalCash;
+    totalAdvance += ms.totalAdvance;
+    totalOnline += ms.totalOnline;
+    totalOtherOnline += ms.totalOtherOnline;
+    totalRecordedDays += ms.recordedDays;
+
+    return {
+      month: ms.month,
+      monthName: ms.monthName,
+      yearMonth: ms.yearMonth,
+      totalRevenue: ms.totalRevenue,
+      totalCash: ms.totalCash,
+      totalAdvance: ms.totalAdvance,
+      totalOnline: ms.totalOnline,
+      totalOtherOnline: ms.totalOtherOnline,
+      platformTotals: ms.platformTotals,
+      occupiedRooms: ms.days.reduce((sum, d) => sum + (d.totals?.occupiedRooms || 0), 0),
+      recordedDays: ms.recordedDays,
+      peakDay: ms.peakDay,
+    };
+  });
+
+  const activeMonths = [...months].filter(m => m.totalRevenue > 0);
+  activeMonths.sort((a, b) => b.totalRevenue - a.totalRevenue);
+  const bestMonth = activeMonths.length > 0 ? activeMonths[0] : null;
+
+  return {
+    year,
+    totalRevenue,
+    totalCash,
+    totalAdvance,
+    totalOnline,
+    totalOtherOnline,
+    totalRecordedDays,
+    bestMonth,
+    months,
+    activePlatforms: Array.from(activePlatformsSet),
   };
 }
 

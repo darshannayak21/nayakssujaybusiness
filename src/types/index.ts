@@ -97,4 +97,32 @@ export interface MonthSummary {
   days: MonthSummaryDay[];
 }
 
+export interface MonthPerformance {
+  month: number;
+  monthName: string;
+  yearMonth: string;
+  totalRevenue: number;
+  totalCash: number;
+  totalAdvance: number;
+  totalOnline: number;
+  totalOtherOnline: number;
+  platformTotals: Record<string, number>;
+  occupiedRooms: number;
+  recordedDays: number;
+  peakDay: { date: string; revenue: number } | null;
+}
+
+export interface YearSummary {
+  year: number;
+  totalRevenue: number;
+  totalCash: number;
+  totalAdvance: number;
+  totalOnline: number;
+  totalOtherOnline: number;
+  totalRecordedDays: number;
+  bestMonth: MonthPerformance | null;
+  months: MonthPerformance[];
+  activePlatforms: string[];
+}
+
 export type ViewMode = 'daily' | 'monthly' | 'analytics' | 'backup';
