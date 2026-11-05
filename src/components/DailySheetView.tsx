@@ -120,21 +120,8 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
       }
 
       room.total = calculateRoomTotal(room);
-
-      if (room.roomRent || room.tBusinessCash || room.tBusinessOnline || room.advanceCash || room.advanceOnline) {
-        if (!room.checkOut) {
-          room.status = 'occupied';
-        }
-      }
     } else {
       (room as any)[field] = value;
-      if (field === 'checkOut') {
-        if (value && value.trim().length > 0) {
-          room.status = 'checkout';
-        } else {
-          room.status = (room.roomRent || room.tBusinessCash || room.tBusinessOnline) ? 'occupied' : 'vacant';
-        }
-      }
     }
 
     newRooms[roomIndex] = room;

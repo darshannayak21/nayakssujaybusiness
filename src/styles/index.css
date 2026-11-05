@@ -66,3 +66,20 @@ body {
     margin: 8mm;
   }
 }
+
+/* Completely hide Netlify floating drawer badge */
+#netlify-drawer,
+netlify-drawer,
+[data-netlify-badge],
+.netlify-badge,
+div[class*="netlify-drawer"],
+div[id*="netlify-drawer"],
+iframe[src*="netlify"],
+iframe[title*="Netlify"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+}

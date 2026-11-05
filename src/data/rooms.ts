@@ -136,18 +136,29 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
     if (typeof r.refund === 'number') refund += r.refund;
     if (typeof r.total === 'number') total += r.total;
 
-    // determine occupancy status
-    const hasActivity = (r.roomRent !== '' && r.roomRent > 0) || 
-                        r.advanceCash !== '' || 
-                        r.advanceOnline !== '' || 
-                        r.tBusinessCash !== '' || 
-                        r.tBusinessOnline !== '' ||
-                        (r.customerName && r.customerName.trim().length > 0);
+    // Strict occupancy determination:
+    // A room has an active entry IF AND ONLY IF actual data exists in that row:
+    const hasActiveEntry = Boolean(
+      (r.customerName && r.customerName.trim().length > 0) ||
+      (typeof r.roomRent === 'number' && r.roomRent > 0) ||
+      (typeof r.advanceCash === 'number' && r.advanceCash > 0) ||
+      (typeof r.advanceOnline === 'number' && r.advanceOnline > 0) ||
+      (typeof r.tBusinessCash === 'number' && r.tBusinessCash > 0) ||
+      (typeof r.tBusinessOnline === 'number' && r.tBusinessOnline > 0)
+    );
 
-    if (r.checkOut && r.checkOut.trim().length > 0 && r.checkOut.toLowerCase() !== 'no') {
+    const isCheckedOut = Boolean(
+      r.checkOut && r.checkOut.trim().length > 0 && r.checkOut.trim().toLowerCase() !== 'no'
+    );
+
+    if (isCheckedOut) {
       checkedOutRooms++;
-    } else if (hasActivity || r.status === 'occupied') {
+      r.status = 'checkout';
+    } else if (hasActiveEntry) {
       occupiedRooms++;
+      r.status = 'occupied';
+    } else {
+      r.status = 'vacant';
     }
   });
 
