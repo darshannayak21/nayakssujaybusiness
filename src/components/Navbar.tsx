@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ViewMode } from '../types';
 import { Calendar, CalendarDays, BarChart3, Database, Globe, Menu, X } from 'lucide-react';
+import { UserButton } from '@clerk/clerk-react';
 import { PlatformSettingsModal } from './PlatformSettingsModal';
 
 interface NavbarProps {
@@ -91,6 +92,17 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onViewChange, onPla
               <Globe className="w-3.5 h-3.5 text-plaza-accent" />
               <span className="hidden sm:inline">Platforms</span>
             </button>
+
+            {/* Clerk User Account & Sign Out */}
+            <div className="flex items-center ml-1">
+              <UserButton 
+                appearance={{
+                  elements: {
+                    userButtonAvatarBox: 'w-8 h-8 rounded-xl border border-plaza-line shadow-2xs',
+                  }
+                }}
+              />
+            </div>
 
             {/* Mobile Hamburger Menu Icon Button */}
             <button

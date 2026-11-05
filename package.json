@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.61.11",
     "@supabase/supabase-js": "^2.119.0",
     "canvas-confetti": "^1.9.4",
     "dexie": "^4.0.10",
