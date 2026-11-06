@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Globe, CheckCircle2 } from 'lucide-react';
 import { getBookingPlatforms, addBookingPlatform, removeBookingPlatform } from '../services/platforms';
+import { cleanupDeletedPlatformFromSheets } from '../services/db';
 
 interface PlatformSettingsModalProps {
   isOpen: boolean;
@@ -48,6 +49,7 @@ export const PlatformSettingsModal: React.FC<PlatformSettingsModalProps> = ({
     }
     if (window.confirm(`Remove "${platformName}" from booking platforms?`)) {
       const updated = await removeBookingPlatform(platformName);
+      await cleanupDeletedPlatformFromSheets(platformName);
       setPlatforms(updated);
       setFeedback(`Removed "${platformName}".`);
       if (onPlatformsChanged) onPlatformsChanged(updated);

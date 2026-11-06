@@ -760,6 +760,42 @@ export async function getYearSummary(year: number): Promise<YearSummary> {
   };
 }
 
+export async function cleanupDeletedPlatformFromSheets(deletedPlatform: string): Promise<void> {
+  const norm = deletedPlatform.trim().toLowerCase();
+  if (!norm) return;
+  try {
+    const allSheets = await db.sheets.toArray();
+    for (const sheet of allSheets) {
+      if (sheet.date === 'CONFIG_PLATFORMS') continue;
+      let hasChanges = false;
+      sheet.rooms.forEach(r => {
+        if (r.platform && r.platform.trim().toLowerCase() === norm) {
+          const hasSales = (typeof r.tBusinessOnline === 'number' && r.tBusinessOnline > 0) ||
+                           (typeof r.roomRent === 'number' && r.roomRent > 0);
+          if (!hasSales) {
+            r.platform = 'Direct';
+            hasChanges = true;
+          }
+        }
+      });
+      if (hasChanges) {
+        sheet.totals = computeSheetTotals(sheet.rooms);
+        sheet.updatedAt = new Date().toISOString();
+        await db.sheets.put(sheet);
+        try {
+          await supabase.from('day_sheets').update({
+            rooms: sheet.rooms,
+            totals: sheet.totals,
+            updated_at: sheet.updatedAt,
+          }).eq('date', sheet.date);
+        } catch (_) {}
+      }
+    }
+  } catch (err) {
+    console.warn('cleanupDeletedPlatformFromSheets error:', err);
+  }
+}
+
 export async function exportAllDataAsJSON(): Promise<string> {
   const allSheets = await db.sheets.toArray();
   const exportPayload = {
