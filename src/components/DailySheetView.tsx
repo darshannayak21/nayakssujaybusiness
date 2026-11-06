@@ -195,6 +195,18 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
       }
 
       room.total = calculateRoomTotal(room);
+
+      // Keep stay tracking synchronized on edit
+      if (room.stayDays && room.stayDays > 1 && room.stayType !== 'stayover') {
+        const advCash = typeof room.advanceCash === 'number' ? room.advanceCash : 0;
+        const advOnline = typeof room.advanceOnline === 'number' ? room.advanceOnline : 0;
+        const tbCash = typeof room.tBusinessCash === 'number' ? room.tBusinessCash : 0;
+        const tbOnline = typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : 0;
+        const totalPaid = advCash + advOnline + tbCash + tbOnline;
+        const rent = typeof room.roomRent === 'number' ? room.roomRent : 0;
+        room.stayPaidOnCheckIn = totalPaid;
+        room.stayBalanceRemaining = rent > 0 ? Math.max(0, rent - totalPaid) : 0;
+      }
     } else {
       (room as any)[field] = value;
     }
@@ -435,15 +447,30 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
             const cardTBOnline = typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : 0;
             const cardTotalAdv = cardAdvCash + cardAdvOnline;
             const cardTotalTB = cardTBCash + cardTBOnline;
-            const cardRemaining = room.stayType === 'stayover' 
-              ? (typeof room.stayBalanceRemaining === 'number' ? room.stayBalanceRemaining : 0)
-              : cardRentVal - cardTotalAdv - cardTotalTB;
-            const cardShowHint = room.stayType === 'stayover'
-              ? (cardRemaining > 0)
-              : (cardRentVal > 0 && cardTotalAdv > 0 && cardRemaining > 0);
-
+            const cardTotalPaid = cardTotalAdv + cardTotalTB;
+            const cardStartingStayBal = typeof room.stayBalanceRemaining === 'number' ? room.stayBalanceRemaining : 0;
             const isStayOver = room.stayType === 'stayover';
-            const isFullyPaidStay = isStayOver && (room.stayBalanceRemaining === 0 || (room.stayPaidOnCheckIn && room.stayPaidOnCheckIn > 0 && !room.stayBalanceRemaining));
+
+            const cardRemaining = isStayOver 
+              ? Math.max(0, cardStartingStayBal - cardTotalTB)
+              : (cardRentVal > 0 ? Math.max(0, cardRentVal - cardTotalPaid) : 0);
+
+            const cardHasPayment = (room.total && typeof room.total === 'number' && room.total > 0) || cardTotalPaid > 0;
+            const isFullyPaidStay = isStayOver && (
+              cardStartingStayBal === 0 || 
+              (cardStartingStayBal > 0 && cardRemaining === 0) ||
+              (room.stayPaidOnCheckIn && room.stayPaidOnCheckIn > 0 && !cardStartingStayBal)
+            );
+
+            const cardShowHint = cardRemaining > 0 && (
+              isStayOver ? true : (cardRentVal > 0 && cardTotalPaid > 0)
+            );
+
+            const cardShowNoneLeft = cardRemaining === 0 && (
+              isStayOver 
+                ? (cardStartingStayBal > 0 && cardTotalTB > 0)
+                : (cardRentVal > 0 && cardTotalPaid >= cardRentVal && cardTotalPaid > 0)
+            );
 
             return (
               <div
@@ -470,8 +497,10 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       </span>
                     )}
                     {room.total && typeof room.total === 'number' && room.total > 0 ? (
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                        Paid: ₹{room.total}
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        cardRemaining > 0 ? 'text-rose-700 bg-rose-50 border-rose-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                      }`}>
+                        Paid: ₹{room.total} {cardRemaining > 0 ? `(₹${cardRemaining} left)` : '(None left)'}
                       </span>
                     ) : isFullyPaidStay ? (
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -583,6 +612,11 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           {cardRemaining} left
                         </div>
                       )}
+                      {!cardShowHint && cardShowNoneLeft && (cardTBOnline > 0) && (
+                        <div className="text-[9.5px] font-semibold text-emerald-600 text-right mt-0.5">
+                          None left
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -599,6 +633,16 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           onChange={(e) => handleFieldChange(room.originalIndex, 'advanceCash', e.target.value)}
                           className="w-full text-right px-2 py-1 rounded-lg border border-plaza-line text-xs"
                         />
+                        {cardShowHint && cardAdvCash > 0 && (
+                          <div className="text-[9px] font-semibold text-rose-500 text-right mt-0.5">
+                            {cardRemaining} left
+                          </div>
+                        )}
+                        {!cardShowHint && cardShowNoneLeft && cardAdvCash > 0 && (
+                          <div className="text-[9px] font-semibold text-emerald-600 text-right mt-0.5">
+                            None left
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="text-[9px] uppercase font-bold text-plaza-text-3 block mb-0.5">
@@ -611,6 +655,16 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           onChange={(e) => handleFieldChange(room.originalIndex, 'advanceOnline', e.target.value)}
                           className="w-full text-right px-2 py-1 rounded-lg border border-plaza-line text-xs"
                         />
+                        {cardShowHint && cardAdvOnline > 0 && (
+                          <div className="text-[9px] font-semibold text-rose-500 text-right mt-0.5">
+                            {cardRemaining} left
+                          </div>
+                        )}
+                        {!cardShowHint && cardShowNoneLeft && cardAdvOnline > 0 && (
+                          <div className="text-[9px] font-semibold text-emerald-600 text-right mt-0.5">
+                            None left
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="text-[9px] uppercase font-bold text-plaza-text-3 block mb-0.5">
@@ -626,6 +680,11 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         {cardShowHint && (
                           <div className="text-[9.5px] font-semibold text-rose-500 text-right mt-0.5">
                             {cardRemaining} left
+                          </div>
+                        )}
+                        {!cardShowHint && cardShowNoneLeft && (cardTBCash > 0) && (
+                          <div className="text-[9.5px] font-semibold text-emerald-600 text-right mt-0.5">
+                            None left
                           </div>
                         )}
                       </div>
@@ -818,14 +877,29 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                   const isStayOver = room.stayType === 'stayover';
                   const totalAdvancePaid = advCashVal + advOnlineVal;
                   const totalTBPaid = tbCashVal + tbOnlineVal;
-                  const remainingLeft = isStayOver
-                    ? (typeof room.stayBalanceRemaining === 'number' ? room.stayBalanceRemaining : 0)
-                    : rentVal - totalAdvancePaid - totalTBPaid;
+                  const totalPaidToday = totalAdvancePaid + totalTBPaid;
 
-                  const isFullyPaidStay = isStayOver && (room.stayBalanceRemaining === 0 || (room.stayPaidOnCheckIn && room.stayPaidOnCheckIn > 0 && !room.stayBalanceRemaining));
-                  const showLeftHint = isStayOver
-                    ? (remainingLeft > 0)
-                    : (rentVal > 0 && totalAdvancePaid > 0 && remainingLeft > 0);
+                  const startingStayBalance = typeof room.stayBalanceRemaining === 'number' ? room.stayBalanceRemaining : 0;
+                  const remainingLeft = isStayOver
+                    ? Math.max(0, startingStayBalance - totalTBPaid)
+                    : (rentVal > 0 ? Math.max(0, rentVal - totalPaidToday) : 0);
+
+                  const hasPayment = (typeof room.total === 'number' && room.total > 0) || totalPaidToday > 0;
+                  const isFullyPaidStay = isStayOver && (
+                    startingStayBalance === 0 || 
+                    (startingStayBalance > 0 && remainingLeft === 0) ||
+                    (room.stayPaidOnCheckIn && room.stayPaidOnCheckIn > 0 && !startingStayBalance)
+                  );
+
+                  const showLeftHint = remainingLeft > 0 && (
+                    isStayOver ? true : (rentVal > 0 && totalPaidToday > 0)
+                  );
+
+                  const showNoneLeftHint = remainingLeft === 0 && (
+                    isStayOver 
+                      ? (startingStayBalance > 0 && totalTBPaid > 0)
+                      : (rentVal > 0 && totalPaidToday >= rentVal && totalPaidToday > 0)
+                  );
 
                   return (
                     <tr
@@ -937,13 +1011,25 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                             —
                           </div>
                         ) : (
-                          <input
-                            type="number"
-                            placeholder="—"
-                            value={room.advanceCash}
-                            onChange={(e) => handleFieldChange(idx, 'advanceCash', e.target.value)}
-                            className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none transition"
-                          />
+                          <>
+                            <input
+                              type="number"
+                              placeholder="—"
+                              value={room.advanceCash}
+                              onChange={(e) => handleFieldChange(idx, 'advanceCash', e.target.value)}
+                              className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none transition"
+                            />
+                            {showLeftHint && advCashVal > 0 && (
+                              <div className="text-[9.5px] font-semibold text-rose-500 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
+                                {remainingLeft} left
+                              </div>
+                            )}
+                            {!showLeftHint && showNoneLeftHint && advCashVal > 0 && (
+                              <div className="text-[9.5px] font-semibold text-emerald-600 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
+                                None left
+                              </div>
+                            )}
+                          </>
                         )}
                       </td>
 
@@ -958,13 +1044,25 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                             —
                           </div>
                         ) : (
-                          <input
-                            type="number"
-                            placeholder="—"
-                            value={room.advanceOnline}
-                            onChange={(e) => handleFieldChange(idx, 'advanceOnline', e.target.value)}
-                            className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none transition"
-                          />
+                          <>
+                            <input
+                              type="number"
+                              placeholder="—"
+                              value={room.advanceOnline}
+                              onChange={(e) => handleFieldChange(idx, 'advanceOnline', e.target.value)}
+                              className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none transition"
+                            />
+                            {showLeftHint && advOnlineVal > 0 && (
+                              <div className="text-[9.5px] font-semibold text-rose-500 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
+                                {remainingLeft} left
+                              </div>
+                            )}
+                            {!showLeftHint && showNoneLeftHint && advOnlineVal > 0 && (
+                              <div className="text-[9.5px] font-semibold text-emerald-600 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
+                                None left
+                              </div>
+                            )}
+                          </>
                         )}
                       </td>
 
@@ -973,7 +1071,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         <input
                           type="number"
                           placeholder={
-                            isStayOver && isFullyPaidStay
+                            isStayOver && isFullyPaidStay && room.tBusinessCash === ''
                               ? "PAID"
                               : showLeftHint && room.tBusinessCash === '' && room.tBusinessOnline === '' 
                               ? `${remainingLeft} left` 
@@ -992,6 +1090,11 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                             {remainingLeft} left
                           </div>
                         )}
+                        {!showLeftHint && showNoneLeftHint && (tbCashVal > 0) && (
+                          <div className="text-[9.5px] font-semibold text-emerald-600 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
+                            None left
+                          </div>
+                        )}
                       </td>
 
                       {/* T. BUSINESS ONLINE */}
@@ -999,7 +1102,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         <input
                           type="number"
                           placeholder={
-                            isStayOver && isFullyPaidStay
+                            isStayOver && isFullyPaidStay && room.tBusinessOnline === ''
                               ? "PAID"
                               : isOnlinePlatform 
                               ? `${platformLabel} ₹` 
@@ -1020,6 +1123,11 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         {showLeftHint && (
                           <div className="text-[9.5px] font-semibold text-rose-500 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
                             {remainingLeft} left
+                          </div>
+                        )}
+                        {!showLeftHint && showNoneLeftHint && (tbOnlineVal > 0) && (
+                          <div className="text-[9.5px] font-semibold text-emerald-600 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
+                            None left
                           </div>
                         )}
                       </td>
@@ -1059,14 +1167,14 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
 
                       {/* PAID COLUMN */}
                       <td className="border-r border-plaza-line p-1">
-                        {isStayOver && room.total === '' ? (
+                        {isStayOver && (room.total === '' || room.total === 0) ? (
                           isFullyPaidStay ? (
                             <div className="w-full text-center py-1">
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10.5px] font-bold shadow-2xs">
                                 PAID
                               </span>
                             </div>
-                          ) : remainingLeft > 0 ? (
+                          ) : startingStayBalance > 0 ? (
                             <div className="w-full text-right pr-2 py-1">
                               <span className="text-[11px] font-bold text-rose-500">
                                 ₹{remainingLeft} Left
@@ -1076,13 +1184,25 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                             <div className="w-full text-center py-1 text-plaza-text-4 font-mono">—</div>
                           )
                         ) : (
-                          <input
-                            type="number"
-                            placeholder="—"
-                            value={room.total}
-                            onChange={(e) => handleFieldChange(idx, 'total', e.target.value)}
-                            className="w-full text-right px-2 py-1 rounded-md font-bold text-plaza-text bg-transparent border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none transition"
-                          />
+                          <div className="w-full">
+                            <input
+                              type="number"
+                              placeholder="—"
+                              value={room.total}
+                              onChange={(e) => handleFieldChange(idx, 'total', e.target.value)}
+                              className="w-full text-right px-2 py-1 rounded-md font-bold text-plaza-text bg-transparent border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none transition"
+                            />
+                            {hasPayment && remainingLeft > 0 && (
+                              <div className="text-[9.5px] font-semibold text-rose-500 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
+                                {remainingLeft} left
+                              </div>
+                            )}
+                            {hasPayment && showNoneLeftHint && (
+                              <div className="text-[9.5px] font-semibold text-emerald-600 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
+                                None left
+                              </div>
+                            )}
+                          </div>
                         )}
                       </td>
 

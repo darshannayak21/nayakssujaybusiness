@@ -182,12 +182,37 @@ export function generateDailyPDF(sheet: DaySheet) {
       customerCellText = customerCellText ? `${customerCellText} [${platformLabel}]` : `[${platformLabel}]`;
     }
 
+    const startingStayBal = typeof r.stayBalanceRemaining === 'number' ? r.stayBalanceRemaining : 0;
+    const tbCash = typeof r.tBusinessCash === 'number' ? r.tBusinessCash : 0;
+    const tbOnline = typeof r.tBusinessOnline === 'number' ? r.tBusinessOnline : 0;
+    const advCash = typeof r.advanceCash === 'number' ? r.advanceCash : 0;
+    const advOnline = typeof r.advanceOnline === 'number' ? r.advanceOnline : 0;
+    const paidToday = advCash + advOnline + tbCash + tbOnline;
+    const rent = typeof r.roomRent === 'number' ? r.roomRent : 0;
+
+    const remaining = isStayOver
+      ? Math.max(0, startingStayBal - (tbCash + tbOnline))
+      : (rent > 0 ? Math.max(0, rent - paidToday) : 0);
+
+    const hasPayment = (typeof r.total === 'number' && r.total > 0) || paidToday > 0;
+    const isFullyPaidStay = isStayOver && (
+      startingStayBal === 0 || 
+      (startingStayBal > 0 && remaining === 0) ||
+      (r.stayPaidOnCheckIn && r.stayPaidOnCheckIn > 0 && !startingStayBal)
+    );
+
     let paidCellContent = formatNum(r.total);
-    if (isStayOver && (r.total === '' || !r.total)) {
-      if (r.stayBalanceRemaining === 0 || (r.stayPaidOnCheckIn && r.stayPaidOnCheckIn > 0 && !r.stayBalanceRemaining)) {
+    if (isStayOver && (r.total === '' || !r.total || r.total === 0)) {
+      if (isFullyPaidStay) {
         paidCellContent = 'PAID';
-      } else if (r.stayBalanceRemaining && r.stayBalanceRemaining > 0) {
-        paidCellContent = `${formatNum(r.stayBalanceRemaining)} Left`;
+      } else if (startingStayBal > 0) {
+        paidCellContent = `${formatNum(startingStayBal)} Left`;
+      }
+    } else if (hasPayment) {
+      if (remaining > 0) {
+        paidCellContent = `${formatNum(r.total)}\n(${formatNum(remaining)} left)`;
+      } else if (remaining === 0 && (isStayOver ? startingStayBal > 0 : (rent > 0 && paidToday >= rent))) {
+        paidCellContent = `${formatNum(r.total)}\n(None left)`;
       }
     }
 
@@ -226,7 +251,7 @@ export function generateDailyPDF(sheet: DaySheet) {
       { content: formatNum(r.gst5), styles: { halign: 'right' as const } },
       { content: formatNum(r.balance), styles: { halign: 'right' as const } },
       { content: formatNum(r.refund), styles: { halign: 'right' as const } },
-      { content: paidCellContent, styles: { halign: 'right' as const, fontStyle: 'bold' as const, textColor: paidCellContent === 'PAID' ? '#047857' : paidCellContent.includes('Left') ? '#E11D48' : HEX_TEXT } },
+      { content: paidCellContent, styles: { halign: 'right' as const, fontStyle: 'bold' as const, textColor: (paidCellContent === 'PAID' || paidCellContent.includes('None left')) ? '#047857' : (paidCellContent.includes('left') || paidCellContent.includes('Left')) ? '#E11D48' : HEX_TEXT } },
       { content: r.checkOut || (isStayOver && r.checkOutDate ? `Dep: ${r.checkOutDate.slice(5)}` : ''), styles: { halign: 'center' as const } },
     ];
   });

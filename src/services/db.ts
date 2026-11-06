@@ -211,9 +211,25 @@ async function applyStayOversFromPrecedingDays(sheet: DaySheet): Promise<DayShee
                 const advOnline = typeof priorRoom.advanceOnline === 'number' ? priorRoom.advanceOnline : 0;
                 const tbCash = typeof priorRoom.tBusinessCash === 'number' ? priorRoom.tBusinessCash : 0;
                 const tbOnline = typeof priorRoom.tBusinessOnline === 'number' ? priorRoom.tBusinessOnline : 0;
-                const totalPaid = advCash + advOnline + tbCash + tbOnline;
+                const paidOnCheckIn = advCash + advOnline + tbCash + tbOnline;
                 const rent = typeof priorRoom.roomRent === 'number' ? priorRoom.roomRent : 0;
-                const remaining = rent > 0 ? Math.max(0, rent - totalPaid) : 0;
+
+                // Sum all payments made on intermediate stayover days between checkInDate and targetDate
+                const pCheckIn = priorRoom.checkInDate;
+                let intermediatePayments = 0;
+                precedingSheets.forEach(interSheet => {
+                  if (interSheet.date > pCheckIn && interSheet.date < targetDate) {
+                    const interRoom = interSheet.rooms.find(r => r.roomNumber === priorRoom.roomNumber && r.primaryStayDate === pCheckIn);
+                    if (interRoom) {
+                      const c = typeof interRoom.tBusinessCash === 'number' ? interRoom.tBusinessCash : 0;
+                      const o = typeof interRoom.tBusinessOnline === 'number' ? interRoom.tBusinessOnline : 0;
+                      intermediatePayments += (c + o);
+                    }
+                  }
+                });
+
+                const totalPaidBeforeToday = paidOnCheckIn + intermediatePayments;
+                const startingBalance = rent > 0 ? Math.max(0, rent - totalPaidBeforeToday) : 0;
 
                 currentRoom.customerName = priorRoom.customerName;
                 currentRoom.platform = priorRoom.platform || 'Direct';
@@ -227,8 +243,8 @@ async function applyStayOversFromPrecedingDays(sheet: DaySheet): Promise<DayShee
                 currentRoom.stayDays = priorRoom.stayDays;
                 currentRoom.stayType = 'stayover';
                 currentRoom.primaryStayDate = priorRoom.checkInDate;
-                currentRoom.stayPaidOnCheckIn = totalPaid;
-                currentRoom.stayBalanceRemaining = remaining;
+                currentRoom.stayPaidOnCheckIn = paidOnCheckIn;
+                currentRoom.stayBalanceRemaining = startingBalance;
                 modified = true;
               }
             }
@@ -268,26 +284,47 @@ export async function syncMultiDayStays(sheet: DaySheet): Promise<void> {
     notes?: string;
   }>();
 
-  sheet.rooms.forEach(r => {
-    if (r.stayDays && r.stayDays > 1 && r.checkOutDate && r.stayType !== 'stayover' && r.customerName?.trim()) {
-      const advCash = typeof r.advanceCash === 'number' ? r.advanceCash : 0;
-      const advOnline = typeof r.advanceOnline === 'number' ? r.advanceOnline : 0;
-      const tbCash = typeof r.tBusinessCash === 'number' ? r.tBusinessCash : 0;
-      const tbOnline = typeof r.tBusinessOnline === 'number' ? r.tBusinessOnline : 0;
-      const totalPaid = advCash + advOnline + tbCash + tbOnline;
-      const rent = typeof r.roomRent === 'number' ? r.roomRent : 0;
-      const remaining = rent > 0 ? Math.max(0, rent - totalPaid) : 0;
+  // For stays where payment was made on an ongoing stayover day:
+  const stayOverUpdateMap = new Map<string, {
+    primaryStayDate: string;
+    checkOutDate: string;
+    remainingAfterToday: number;
+  }>();
 
-      multiDayMap.set(r.roomNumber, {
-        stayDays: r.stayDays,
-        checkOutDate: r.checkOutDate,
-        customerName: r.customerName,
-        platform: r.platform || 'Direct',
-        isAgoda: Boolean(r.isAgoda || r.platform === 'Agoda'),
-        paidOnCheckIn: totalPaid,
-        balanceRemaining: remaining,
-        notes: r.notes,
-      });
+  sheet.rooms.forEach(r => {
+    if (r.stayDays && r.stayDays > 1 && r.checkOutDate && r.customerName?.trim()) {
+      if (r.stayType !== 'stayover') {
+        const advCash = typeof r.advanceCash === 'number' ? r.advanceCash : 0;
+        const advOnline = typeof r.advanceOnline === 'number' ? r.advanceOnline : 0;
+        const tbCash = typeof r.tBusinessCash === 'number' ? r.tBusinessCash : 0;
+        const tbOnline = typeof r.tBusinessOnline === 'number' ? r.tBusinessOnline : 0;
+        const totalPaid = advCash + advOnline + tbCash + tbOnline;
+        const rent = typeof r.roomRent === 'number' ? r.roomRent : 0;
+        const remaining = rent > 0 ? Math.max(0, rent - totalPaid) : 0;
+
+        multiDayMap.set(r.roomNumber, {
+          stayDays: r.stayDays,
+          checkOutDate: r.checkOutDate,
+          customerName: r.customerName,
+          platform: r.platform || 'Direct',
+          isAgoda: Boolean(r.isAgoda || r.platform === 'Agoda'),
+          paidOnCheckIn: totalPaid,
+          balanceRemaining: remaining,
+          notes: r.notes,
+        });
+      } else if (r.primaryStayDate && sheet.date < r.checkOutDate) {
+        // Stayover row: compute remaining balance after today's payment
+        const startingBal = typeof r.stayBalanceRemaining === 'number' ? r.stayBalanceRemaining : 0;
+        const tbCash = typeof r.tBusinessCash === 'number' ? r.tBusinessCash : 0;
+        const tbOnline = typeof r.tBusinessOnline === 'number' ? r.tBusinessOnline : 0;
+        const remainingAfterToday = Math.max(0, startingBal - (tbCash + tbOnline));
+
+        stayOverUpdateMap.set(r.roomNumber, {
+          primaryStayDate: r.primaryStayDate,
+          checkOutDate: r.checkOutDate,
+          remainingAfterToday,
+        });
+      }
     }
   });
 
@@ -350,7 +387,16 @@ export async function syncMultiDayStays(sheet: DaySheet): Promise<void> {
             hasChange = true;
           }
         }
-      } else if (targetSheet) {
+      } else if (stayOverUpdateMap.has(def.roomNumber)) {
+        const soInfo = stayOverUpdateMap.get(def.roomNumber)!;
+        if (targetDate < soInfo.checkOutDate && targetSheet) {
+          const room = targetSheet.rooms.find(r => r.roomNumber === def.roomNumber);
+          if (room && (room.primaryStayDate === soInfo.primaryStayDate || room.stayType === 'stayover')) {
+            room.stayBalanceRemaining = soInfo.remainingAfterToday;
+            hasChange = true;
+          }
+        }
+      } else if (targetSheet && multiDayMap.has(def.roomNumber)) {
         const room = targetSheet.rooms.find(r => r.roomNumber === def.roomNumber);
         if (room && room.primaryStayDate === checkInDate) {
           const empty = createEmptyRoomEntry(def);
