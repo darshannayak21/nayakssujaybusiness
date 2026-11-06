@@ -126,11 +126,20 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
     
     if (isOnlinePlatform) {
       const plat = r.platform.trim();
-      platformBookingsCount[plat] = (platformBookingsCount[plat] || 0) + 1;
+      const hasBooking = Boolean(
+        r.stayType === 'stayover' ||
+        (r.customerName && r.customerName.trim().length > 0) ||
+        (typeof r.roomRent === 'number' && r.roomRent > 0) ||
+        (typeof r.tBusinessOnline === 'number' && r.tBusinessOnline > 0)
+      );
+
+      if (hasBooking) {
+        platformBookingsCount[plat] = (platformBookingsCount[plat] || 0) + 1;
+      }
       
       // On stayover, only count online money if explicitly entered on this date
       if (r.stayType === 'stayover') {
-        if (typeof r.tBusinessOnline === 'number') {
+        if (typeof r.tBusinessOnline === 'number' && r.tBusinessOnline > 0) {
           platformTotals[plat] = (platformTotals[plat] || 0) + r.tBusinessOnline;
           if (plat.toLowerCase() === 'agoda') {
             tBusinessAgoda += r.tBusinessOnline;
@@ -141,11 +150,15 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
           ? r.tBusinessOnline 
           : (typeof r.roomRent === 'number' && r.roomRent > 0 ? r.roomRent : 0);
 
-        platformTotals[plat] = (platformTotals[plat] || 0) + amt;
+        if (amt > 0) {
+          platformTotals[plat] = (platformTotals[plat] || 0) + amt;
+        }
 
         if (plat.toLowerCase() === 'agoda') {
           tBusinessAgoda += amt;
-          agodaBookingsCount++;
+          if (hasBooking && amt > 0) {
+            agodaBookingsCount++;
+          }
         }
       }
       // For online platforms, advance does not apply (paid through OTA)

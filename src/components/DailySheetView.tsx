@@ -586,6 +586,9 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         {platforms.map(p => (
                           <option key={p} value={p}>{p}</option>
                         ))}
+                        {room.platform && room.platform !== 'Direct' && !platforms.some(p => p.toLowerCase() === room.platform.toLowerCase()) && (
+                          <option value={room.platform}>{room.platform} (Archived)</option>
+                        )}
                       </select>
                     </div>
                   </div>
@@ -1052,6 +1055,9 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           {platforms.map((p) => (
                             <option key={p} value={p}>{p}</option>
                           ))}
+                          {room.platform && room.platform !== 'Direct' && !platforms.some(p => p.toLowerCase() === room.platform.toLowerCase()) && (
+                            <option value={room.platform}>{room.platform} (Archived)</option>
+                          )}
                         </select>
                       </td>
 

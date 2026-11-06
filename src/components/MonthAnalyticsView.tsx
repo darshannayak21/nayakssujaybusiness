@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { MonthSummary, YearSummary, MonthPerformance, MonthSummaryDay } from '../types';
 import { getMonthSummary, getYearSummary } from '../services/db';
+import { getBookingPlatforms } from '../services/platforms';
 
 interface MonthAnalyticsViewProps {
   initialYear?: number;
@@ -81,6 +82,16 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
     } else {
       loadYearData(year);
     }
+
+    const handler = () => {
+      if (analyticsScope === 'daily') {
+        loadMonthData(year, month);
+      } else {
+        loadYearData(year);
+      }
+    };
+    window.addEventListener('plaza_platforms_updated', handler);
+    return () => window.removeEventListener('plaza_platforms_updated', handler);
   }, [analyticsScope, year, month]);
 
   const handlePrevMonth = () => {
@@ -160,9 +171,19 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
   }
 
   // Active online platforms across the month/year
-  const activePlatforms = analyticsScope === 'daily' 
-    ? (summary?.activePlatforms || ['Agoda'])
-    : (yearSummary?.activePlatforms || ['Agoda']);
+  // Configured platforms always show (even with 0 sales); removed platforms show ONLY if they had sales > 0
+  const configured = getBookingPlatforms();
+  const rawPlatforms = analyticsScope === 'daily' 
+    ? (summary?.activePlatforms || configured)
+    : (yearSummary?.activePlatforms || configured);
+
+  const activePlatforms = rawPlatforms.filter(plat => {
+    if (configured.some(cp => cp.toLowerCase() === plat.toLowerCase())) return true;
+    const amt = analyticsScope === 'daily'
+      ? (summary?.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? summary?.totalAgoda || 0 : 0) || 0)
+      : (yearSummary?.months.reduce((sum, m) => sum + (m.platformTotals?.[plat] || 0), 0) || 0);
+    return amt > 0;
+  });
 
   // Maximum revenues for chart heights
   const maxDayRevenue = Math.max(...(summary?.days.map(d => d.dayTotal) || [1]), 10000);

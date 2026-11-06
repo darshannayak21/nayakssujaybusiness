@@ -42,6 +42,9 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
 
   useEffect(() => {
     loadData(year, month);
+    const handler = () => loadData(year, month);
+    window.addEventListener('plaza_platforms_updated', handler);
+    return () => window.removeEventListener('plaza_platforms_updated', handler);
   }, [year, month]);
 
   const handlePrevMonth = () => {

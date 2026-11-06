@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable, { RowInput } from 'jspdf-autotable';
 import { DaySheet, MonthSummary } from '../types';
 import { formatDateForDisplay } from './db';
+import { getBookingPlatforms } from './platforms';
 
 // Color constants from Nayaks_Sujay_Design_Style.md
 const HEX_ACCENT = '#F26B1D';
@@ -433,10 +434,21 @@ export function generateMonthlyPDF(summary: MonthSummary) {
   doc.setTextColor(RGB_TEXT_MUTED[0], RGB_TEXT_MUTED[1], RGB_TEXT_MUTED[2]);
   doc.text(`Monthly Business Statement  ·  ${summary.monthName} ${summary.year}  ·  Rooms 101 – 303`, margin, 17);
 
-  // Dynamic Platforms
-  const platforms = summary.activePlatforms && summary.activePlatforms.length > 0 
+  // Dynamic Platforms (Configured platforms shown even with 0 sales; removed platforms shown ONLY if sales > 0 this month)
+  const configured = getBookingPlatforms();
+  const rawPlatforms = summary.activePlatforms && summary.activePlatforms.length > 0 
     ? summary.activePlatforms 
-    : ['Agoda'];
+    : configured;
+
+  const platforms = rawPlatforms.filter(p => {
+    if (configured.some(cp => cp.toLowerCase() === p.toLowerCase())) return true;
+    const tot = summary.platformTotals?.[p] || (p.toLowerCase() === 'agoda' ? summary.totalAgoda : 0) || 0;
+    return tot > 0;
+  });
+
+  if (platforms.length === 0) {
+    platforms.push(...(configured.length > 0 ? configured : ['Agoda']));
+  }
 
   // Dynamic Table Header
   const headCols: any[] = [

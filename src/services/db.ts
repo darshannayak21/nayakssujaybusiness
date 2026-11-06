@@ -94,9 +94,15 @@ export async function getDaySheet(dateStr: string): Promise<DaySheet> {
 
     if (!error && data) {
       const parsedRooms = (typeof data.rooms === 'string' ? JSON.parse(data.rooms) : data.rooms) || [];
+      const configuredPlatforms = getBookingPlatforms();
       parsedRooms.forEach((r: any) => {
         if (!r.platform) {
           r.platform = r.isAgoda ? 'Agoda' : 'Direct';
+        }
+        const isKnown = configuredPlatforms.some(p => p.toLowerCase() === (r.platform || '').toLowerCase());
+        const isEmpty = !r.customerName && !r.roomRent && !r.tBusinessOnline && !r.total && r.stayType !== 'stayover';
+        if (!isKnown && r.platform && r.platform !== 'Direct' && isEmpty) {
+          r.platform = 'Direct';
         }
       });
       const computedTotals = computeSheetTotals(parsedRooms);
@@ -125,6 +131,17 @@ export async function getDaySheet(dateStr: string): Promise<DaySheet> {
     try {
       const existing = await db.sheets.get(dateStr);
       if (existing) {
+        const configuredPlatforms = getBookingPlatforms();
+        existing.rooms.forEach((r: any) => {
+          if (!r.platform) {
+            r.platform = r.isAgoda ? 'Agoda' : 'Direct';
+          }
+          const isKnown = configuredPlatforms.some(p => p.toLowerCase() === (r.platform || '').toLowerCase());
+          const isEmpty = !r.customerName && !r.roomRent && !r.tBusinessOnline && !r.total && r.stayType !== 'stayover';
+          if (!isKnown && r.platform && r.platform !== 'Direct' && isEmpty) {
+            r.platform = 'Direct';
+          }
+        });
         if (existing.rooms.length < ROOM_DEFINITIONS.length) {
           const mergedRooms = createInitialRooms().map(emptyRoom => {
             const found = existing.rooms.find(r => r.roomNumber === emptyRoom.roomNumber);
@@ -466,7 +483,7 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
   const daysInMonth = new Date(year, month, 0).getDate();
 
   const sheetMap = new Map<string, DaySheet>();
-  const activePlatformsSet = new Set<string>(getBookingPlatforms());
+  const monthPlatformSales: Record<string, number> = {};
 
   // 1. Query Supabase for this month
   try {
@@ -484,11 +501,17 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
           if (!r.platform) {
             r.platform = r.isAgoda ? 'Agoda' : 'Direct';
           }
-          if (r.platform && r.platform !== 'Direct') {
-            activePlatformsSet.add(r.platform);
-          }
         });
         const totals = computeSheetTotals(rooms);
+        Object.entries(totals.platformTotals || {}).forEach(([plat, amt]) => {
+          if (amt > 0) {
+            monthPlatformSales[plat] = (monthPlatformSales[plat] || 0) + amt;
+          }
+        });
+        if (totals.tBusinessAgoda > 0) {
+          monthPlatformSales['Agoda'] = (monthPlatformSales['Agoda'] || 0) + totals.tBusinessAgoda;
+        }
+
         sheetMap.set(row.date, {
           date: row.date,
           dayOfWeek: getWeekdayName(row.date),
@@ -516,16 +539,39 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
         if (!r.platform) {
           r.platform = r.isAgoda ? 'Agoda' : 'Direct';
         }
-        if (r.platform && r.platform !== 'Direct') {
-          activePlatformsSet.add(r.platform);
-        }
       });
       s.totals = computeSheetTotals(s.rooms);
+      Object.entries(s.totals.platformTotals || {}).forEach(([plat, amt]) => {
+        if (amt > 0) {
+          monthPlatformSales[plat] = (monthPlatformSales[plat] || 0) + amt;
+        }
+      });
+      if (s.totals.tBusinessAgoda > 0) {
+        monthPlatformSales['Agoda'] = (monthPlatformSales['Agoda'] || 0) + s.totals.tBusinessAgoda;
+      }
       sheetMap.set(s.date, s);
     });
   }
 
-  const activePlatforms = Array.from(activePlatformsSet);
+  // Platform inclusion rules:
+  // 1. All currently configured platforms are ALWAYS included (even if 0 sales this month)
+  // 2. Any platform removed from configured platforms is included ONLY IF it had actual sales (> 0) in this month.
+  //    If a removed platform has 0 sales in this month, DO NOT show it in the Monthly PDF, View, or Analytics.
+  const configuredPlatforms = getBookingPlatforms();
+  const activePlatforms: string[] = [];
+
+  configuredPlatforms.forEach(p => {
+    if (!activePlatforms.some(ap => ap.toLowerCase() === p.toLowerCase())) {
+      activePlatforms.push(p);
+    }
+  });
+
+  Object.entries(monthPlatformSales).forEach(([plat, sales]) => {
+    if (sales > 0 && !activePlatforms.some(ap => ap.toLowerCase() === plat.toLowerCase())) {
+      activePlatforms.push(plat);
+    }
+  });
+
   const monthPlatformTotals: Record<string, number> = {};
   activePlatforms.forEach(p => { monthPlatformTotals[p] = 0; });
 
@@ -568,8 +614,10 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
       totalOccupancySum += t.occupiedRooms;
 
       // Accumulate dynamic platform totals
+      const dayPlatTotals: Record<string, number> = {};
       activePlatforms.forEach(p => {
-        const amt = t.platformTotals?.[p] || 0;
+        const amt = t.platformTotals?.[p] || (p.toLowerCase() === 'agoda' ? t.tBusinessAgoda : 0) || 0;
+        dayPlatTotals[p] = amt;
         monthPlatformTotals[p] = (monthPlatformTotals[p] || 0) + amt;
       });
 
@@ -591,7 +639,7 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
         advanceTotal: t.advanceTotal,
         tBusinessCash: t.tBusinessCash,
         agodaOnline: t.tBusinessAgoda,
-        platformTotals: t.platformTotals || {},
+        platformTotals: dayPlatTotals,
         otherOnline: t.tBusinessOtherOnline,
         dayTotal: effectiveDayTotal,
       });
@@ -650,7 +698,14 @@ export async function getYearSummary(year: number): Promise<YearSummary> {
   const monthPromises = Array.from({ length: 12 }, (_, i) => getMonthSummary(year, i + 1));
   const monthSummaries = await Promise.all(monthPromises);
 
-  const activePlatformsSet = new Set<string>();
+  const configuredPlatforms = getBookingPlatforms();
+  const activePlatforms: string[] = [];
+  configuredPlatforms.forEach(p => {
+    if (!activePlatforms.some(ap => ap.toLowerCase() === p.toLowerCase())) {
+      activePlatforms.push(p);
+    }
+  });
+
   let totalRevenue = 0;
   let totalCash = 0;
   let totalAdvance = 0;
@@ -659,7 +714,11 @@ export async function getYearSummary(year: number): Promise<YearSummary> {
   let totalRecordedDays = 0;
 
   const months: MonthPerformance[] = monthSummaries.map((ms) => {
-    ms.activePlatforms.forEach(p => activePlatformsSet.add(p));
+    ms.activePlatforms.forEach(p => {
+      if (!activePlatforms.some(ap => ap.toLowerCase() === p.toLowerCase())) {
+        activePlatforms.push(p);
+      }
+    });
     totalRevenue += ms.totalRevenue;
     totalCash += ms.totalCash;
     totalAdvance += ms.totalAdvance;
@@ -697,7 +756,7 @@ export async function getYearSummary(year: number): Promise<YearSummary> {
     totalRecordedDays,
     bestMonth,
     months,
-    activePlatforms: Array.from(activePlatformsSet),
+    activePlatforms,
   };
 }
 
