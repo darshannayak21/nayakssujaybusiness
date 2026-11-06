@@ -194,6 +194,21 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
         room.tBusinessOnline = numVal;
       }
 
+      if (field === 'advanceCash') {
+        if (typeof numVal === 'number' && numVal > 0 && !room.advanceCashDate) {
+          room.advanceCashDate = sheet.date;
+        } else if (value === '') {
+          room.advanceCashDate = '';
+        }
+      }
+      if (field === 'advanceOnline') {
+        if (typeof numVal === 'number' && numVal > 0 && !room.advanceOnlineDate) {
+          room.advanceOnlineDate = sheet.date;
+        } else if (value === '') {
+          room.advanceOnlineDate = '';
+        }
+      }
+
       room.total = calculateRoomTotal(room);
 
       // Keep stay tracking synchronized on edit
@@ -492,7 +507,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       Floor {room.floor}
                     </span>
                     {isStayOver && (
-                      <span className="text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 uppercase tracking-wide">
+                      <span className="text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-plaza-accent-tint text-plaza-accent border border-plaza-accent-line uppercase tracking-wide">
                         Reserved
                       </span>
                     )}
@@ -623,16 +638,36 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                   {!isOnlinePlatform && (
                     <div className="grid grid-cols-3 gap-2 pt-1 border-t border-plaza-line/30">
                       <div>
-                        <label className="text-[9px] uppercase font-bold text-plaza-text-3 block mb-0.5">
-                          Adv Cash
-                        </label>
-                        <input
-                          type="number"
-                          placeholder="₹ 0"
-                          value={room.advanceCash}
-                          onChange={(e) => handleFieldChange(room.originalIndex, 'advanceCash', e.target.value)}
-                          className="w-full text-right px-2 py-1 rounded-lg border border-plaza-line text-xs"
-                        />
+                        <div className="flex items-center justify-between mb-0.5">
+                          <label className="text-[9px] uppercase font-bold text-plaza-text-3">
+                            Adv Cash
+                          </label>
+                          {cardAdvCash > 0 && room.advanceCashDate && (
+                            <span className="text-[8.5px] font-bold text-amber-500 font-mono">
+                              [{formatShortDate(room.advanceCashDate)}]
+                            </span>
+                          )}
+                        </div>
+                        <div className="relative flex items-center">
+                          <input
+                            type="number"
+                            placeholder="₹ 0"
+                            value={room.advanceCash}
+                            onChange={(e) => handleFieldChange(room.originalIndex, 'advanceCash', e.target.value)}
+                            className={`w-full text-right px-2 py-1 rounded-lg border border-plaza-line text-xs ${cardAdvCash > 0 ? 'pr-5' : ''}`}
+                          />
+                          {cardAdvCash > 0 && (
+                            <div className="absolute right-1 flex items-center" title="Choose advance date">
+                              <CalendarIcon className="w-3 h-3 text-amber-500 hover:text-amber-600 pointer-events-none" />
+                              <input
+                                type="date"
+                                value={room.advanceCashDate || sheet.date}
+                                onChange={(e) => handleFieldChange(room.originalIndex, 'advanceCashDate', e.target.value)}
+                                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                              />
+                            </div>
+                          )}
+                        </div>
                         {cardShowHint && cardAdvCash > 0 && (
                           <div className="text-[9px] font-semibold text-rose-500 text-right mt-0.5">
                             {cardRemaining} left
@@ -645,16 +680,36 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         )}
                       </div>
                       <div>
-                        <label className="text-[9px] uppercase font-bold text-plaza-text-3 block mb-0.5">
-                          Adv Online
-                        </label>
-                        <input
-                          type="number"
-                          placeholder="₹ 0"
-                          value={room.advanceOnline}
-                          onChange={(e) => handleFieldChange(room.originalIndex, 'advanceOnline', e.target.value)}
-                          className="w-full text-right px-2 py-1 rounded-lg border border-plaza-line text-xs"
-                        />
+                        <div className="flex items-center justify-between mb-0.5">
+                          <label className="text-[9px] uppercase font-bold text-plaza-text-3">
+                            Adv Online
+                          </label>
+                          {cardAdvOnline > 0 && room.advanceOnlineDate && (
+                            <span className="text-[8.5px] font-bold text-amber-500 font-mono">
+                              [{formatShortDate(room.advanceOnlineDate)}]
+                            </span>
+                          )}
+                        </div>
+                        <div className="relative flex items-center">
+                          <input
+                            type="number"
+                            placeholder="₹ 0"
+                            value={room.advanceOnline}
+                            onChange={(e) => handleFieldChange(room.originalIndex, 'advanceOnline', e.target.value)}
+                            className={`w-full text-right px-2 py-1 rounded-lg border border-plaza-line text-xs ${cardAdvOnline > 0 ? 'pr-5' : ''}`}
+                          />
+                          {cardAdvOnline > 0 && (
+                            <div className="absolute right-1 flex items-center" title="Choose advance date">
+                              <CalendarIcon className="w-3 h-3 text-amber-500 hover:text-amber-600 pointer-events-none" />
+                              <input
+                                type="date"
+                                value={room.advanceOnlineDate || sheet.date}
+                                onChange={(e) => handleFieldChange(room.originalIndex, 'advanceOnlineDate', e.target.value)}
+                                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                              />
+                            </div>
+                          )}
+                        </div>
                         {cardShowHint && cardAdvOnline > 0 && (
                           <div className="text-[9px] font-semibold text-rose-500 text-right mt-0.5">
                             {cardRemaining} left
@@ -941,7 +996,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           />
                           {isStayOver && (
                             <span 
-                              className="shrink-0 px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-amber-100 text-amber-900 border border-amber-300 uppercase tracking-wider select-none"
+                              className="shrink-0 px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-plaza-accent-tint text-plaza-accent border border-plaza-accent-line uppercase tracking-wider select-none"
                               title={`Continuing multi-day reservation from ${room.checkInDate}`}
                             >
                               Reserved
@@ -956,16 +1011,16 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           <button
                             type="button"
                             onClick={() => handleOpenStayModal(idx)}
-                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10.5px] font-bold transition shadow-2xs ${
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition shadow-2xs ${
                               isStayOver
-                                ? 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100'
+                                ? 'bg-plaza-accent-tint text-plaza-accent border border-plaza-accent-line hover:border-plaza-accent'
                                 : 'bg-plaza-accent text-white hover:bg-plaza-accent-hover'
                             }`}
                             title="Click to view or edit stay dates"
                           >
                             <CalendarIcon className="w-3 h-3 shrink-0" />
                             <span>{formatShortDate(room.checkInDate)} → {formatShortDate(room.checkOutDate)}</span>
-                            <span className={`px-1 py-0.2 rounded text-[9px] ${isStayOver ? 'bg-amber-200/80 text-amber-900' : 'bg-white/25 text-white'}`}>
+                            <span className={`px-1 py-0.2 rounded text-[9px] ${isStayOver ? 'bg-plaza-accent text-white' : 'bg-white/25 text-white'}`}>
                               {room.stayDays}d
                             </span>
                           </button>
@@ -973,7 +1028,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           <button
                             type="button"
                             onClick={() => handleOpenStayModal(idx)}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-plaza-line/70 text-plaza-text-3 hover:text-plaza-accent hover:border-plaza-accent hover:bg-plaza-accent-tint text-[10.5px] font-medium transition"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-plaza-line text-plaza-text-3 hover:text-plaza-accent hover:border-plaza-accent hover:bg-plaza-accent-tint text-[10.5px] font-medium transition"
                             title="Click to set multi-day stay dates"
                           >
                             <CalendarIcon className="w-3 h-3 text-plaza-text-4" />
@@ -1012,13 +1067,32 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           </div>
                         ) : (
                           <>
-                            <input
-                              type="number"
-                              placeholder="—"
-                              value={room.advanceCash}
-                              onChange={(e) => handleFieldChange(idx, 'advanceCash', e.target.value)}
-                              className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none transition"
-                            />
+                            <div className="relative flex items-center">
+                              <input
+                                type="number"
+                                placeholder="—"
+                                value={room.advanceCash}
+                                onChange={(e) => handleFieldChange(idx, 'advanceCash', e.target.value)}
+                                className={`w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none transition ${advCashVal > 0 ? 'pr-6' : ''}`}
+                              />
+                              {advCashVal > 0 && (
+                                <div className="absolute right-1 flex items-center" title="Choose date advance was received">
+                                  <CalendarIcon className="w-3.5 h-3.5 text-amber-500 hover:text-amber-600 transition pointer-events-none" />
+                                  <input
+                                    type="date"
+                                    value={room.advanceCashDate || sheet.date}
+                                    onChange={(e) => handleFieldChange(idx, 'advanceCashDate', e.target.value)}
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                    title="Choose advance date"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                            {advCashVal > 0 && room.advanceCashDate && (
+                              <div className="text-[9.5px] font-bold text-amber-500 text-right pr-1 leading-none mt-0.5 select-none font-mono tracking-tight">
+                                [{formatShortDate(room.advanceCashDate)}]
+                              </div>
+                            )}
                             {showLeftHint && advCashVal > 0 && (
                               <div className="text-[9.5px] font-semibold text-rose-500 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
                                 {remainingLeft} left
@@ -1045,13 +1119,32 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           </div>
                         ) : (
                           <>
-                            <input
-                              type="number"
-                              placeholder="—"
-                              value={room.advanceOnline}
-                              onChange={(e) => handleFieldChange(idx, 'advanceOnline', e.target.value)}
-                              className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none transition"
-                            />
+                            <div className="relative flex items-center">
+                              <input
+                                type="number"
+                                placeholder="—"
+                                value={room.advanceOnline}
+                                onChange={(e) => handleFieldChange(idx, 'advanceOnline', e.target.value)}
+                                className={`w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none transition ${advOnlineVal > 0 ? 'pr-6' : ''}`}
+                              />
+                              {advOnlineVal > 0 && (
+                                <div className="absolute right-1 flex items-center" title="Choose date advance was received">
+                                  <CalendarIcon className="w-3.5 h-3.5 text-amber-500 hover:text-amber-600 transition pointer-events-none" />
+                                  <input
+                                    type="date"
+                                    value={room.advanceOnlineDate || sheet.date}
+                                    onChange={(e) => handleFieldChange(idx, 'advanceOnlineDate', e.target.value)}
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                    title="Choose advance date"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                            {advOnlineVal > 0 && room.advanceOnlineDate && (
+                              <div className="text-[9.5px] font-bold text-amber-500 text-right pr-1 leading-none mt-0.5 select-none font-mono tracking-tight">
+                                [{formatShortDate(room.advanceOnlineDate)}]
+                              </div>
+                            )}
                             {showLeftHint && advOnlineVal > 0 && (
                               <div className="text-[9.5px] font-semibold text-rose-500 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
                                 {remainingLeft} left

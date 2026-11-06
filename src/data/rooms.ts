@@ -51,6 +51,8 @@ export function createEmptyRoomEntry(def: RoomDefinition): RoomEntry {
     roomRent: '',
     advanceCash: '',
     advanceOnline: '',
+    advanceCashDate: '',
+    advanceOnlineDate: '',
     tBusinessCash: '',
     tBusinessOnline: '',
     gst5: '',

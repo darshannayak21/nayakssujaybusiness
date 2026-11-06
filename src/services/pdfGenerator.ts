@@ -170,6 +170,13 @@ export function generateDailyPDF(sheet: DaySheet) {
     return Number(val).toLocaleString('en-IN');
   };
 
+  const formatShortDate = (dStr?: string) => {
+    if (!dStr) return '';
+    const parts = dStr.split('-');
+    if (parts.length < 3) return dStr;
+    return `${parts[2]}/${parts[1]}`;
+  };
+
   const tableBody: RowInput[] = sheet.rooms.map((r) => {
     const isOnlinePlatform = Boolean(r.platform && r.platform !== 'Direct' && r.platform.trim().length > 0);
     const platformLabel = isOnlinePlatform ? r.platform.trim() : '';
@@ -216,6 +223,16 @@ export function generateDailyPDF(sheet: DaySheet) {
       }
     }
 
+    let advCashCellText = isOnlinePlatform || isStayOver ? '-' : formatNum(r.advanceCash);
+    if (!isOnlinePlatform && !isStayOver && r.advanceCash && r.advanceCashDate) {
+      advCashCellText = `${formatNum(r.advanceCash)}\n[${formatShortDate(r.advanceCashDate)}]`;
+    }
+
+    let advOnlineCellText = isOnlinePlatform || isStayOver ? '-' : formatNum(r.advanceOnline);
+    if (!isOnlinePlatform && !isStayOver && r.advanceOnline && r.advanceOnlineDate) {
+      advOnlineCellText = `${formatNum(r.advanceOnline)}\n[${formatShortDate(r.advanceOnlineDate)}]`;
+    }
+
     return [
       { content: String(r.slNo), styles: { halign: 'center' as const } },
       { 
@@ -237,8 +254,22 @@ export function generateDailyPDF(sheet: DaySheet) {
         } 
       },
       // In online platforms or stay-overs there is no advance option: show '-'
-      { content: isOnlinePlatform || isStayOver ? '-' : formatNum(r.advanceCash), styles: { halign: 'right' as const, textColor: isOnlinePlatform || isStayOver ? HEX_TEXT_LIGHT : HEX_TEXT } },
-      { content: isOnlinePlatform || isStayOver ? '-' : formatNum(r.advanceOnline), styles: { halign: 'right' as const, textColor: isOnlinePlatform || isStayOver ? HEX_TEXT_LIGHT : HEX_TEXT } },
+      { 
+        content: advCashCellText, 
+        styles: { 
+          halign: 'right' as const, 
+          textColor: isOnlinePlatform || isStayOver ? HEX_TEXT_LIGHT : (r.advanceCashDate ? '#B45309' : HEX_TEXT),
+          fontStyle: r.advanceCashDate ? 'bold' as const : 'normal' as const
+        } 
+      },
+      { 
+        content: advOnlineCellText, 
+        styles: { 
+          halign: 'right' as const, 
+          textColor: isOnlinePlatform || isStayOver ? HEX_TEXT_LIGHT : (r.advanceOnlineDate ? '#B45309' : HEX_TEXT),
+          fontStyle: r.advanceOnlineDate ? 'bold' as const : 'normal' as const
+        } 
+      },
       { content: formatNum(r.tBusinessCash), styles: { halign: 'right' as const } },
       { 
         content: formatNum(r.tBusinessOnline), 

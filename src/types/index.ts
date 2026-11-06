@@ -8,6 +8,9 @@ export interface RoomEntry {
   roomRent: number | '';
   advanceCash: number | '';
   advanceOnline: number | '';
+  advanceCashDate?: string;      // Date when advance cash was received (YYYY-MM-DD)
+  advanceOnlineDate?: string;    // Date when advance online was received (YYYY-MM-DD)
+  advanceDate?: string;          // Generic fallback advance date
   tBusinessCash: number | '';
   tBusinessOnline: number | '';
   gst5: number | '';
