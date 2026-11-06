@@ -1,6 +1,6 @@
 import Dexie, { Table } from 'dexie';
 import { DaySheet, MonthSummary, MonthSummaryDay, MonthPerformance, YearSummary } from '../types';
-import { ROOM_DEFINITIONS, createInitialRooms, computeSheetTotals } from '../data/rooms';
+import { ROOM_DEFINITIONS, createInitialRooms, createEmptyRoomEntry, computeSheetTotals } from '../data/rooms';
 import { supabase } from './supabase';
 import { getBookingPlatforms } from './platforms';
 
@@ -53,6 +53,17 @@ export function getTodayDateString(): string {
   return `${year}-${month}-${day}`;
 }
 
+export function addDays(dateStr: string, n: number): string {
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  dt.setDate(dt.getDate() + n);
+  const yr = dt.getFullYear();
+  const mo = String(dt.getMonth() + 1).padStart(2, '0');
+  const da = String(dt.getDate()).padStart(2, '0');
+  return `${yr}-${mo}-${da}`;
+}
+
 export function createNewDaySheet(dateStr: string): DaySheet {
   const rooms = createInitialRooms();
   const totals = computeSheetTotals(rooms);
@@ -71,6 +82,8 @@ export function createNewDaySheet(dateStr: string): DaySheet {
 }
 
 export async function getDaySheet(dateStr: string): Promise<DaySheet> {
+  let loadedSheet: DaySheet | null = null;
+
   // 1. Try Supabase Cloud first
   try {
     const { data, error } = await supabase
@@ -87,7 +100,7 @@ export async function getDaySheet(dateStr: string): Promise<DaySheet> {
         }
       });
       const computedTotals = computeSheetTotals(parsedRooms);
-      const sheet: DaySheet = {
+      loadedSheet = {
         date: data.date,
         dayOfWeek: getWeekdayName(data.date),
         rooms: parsedRooms.length === ROOM_DEFINITIONS.length ? parsedRooms : createInitialRooms().map(empty => {
@@ -101,34 +114,270 @@ export async function getDaySheet(dateStr: string): Promise<DaySheet> {
         updatedAt: data.updated_at || new Date().toISOString(),
       };
       // Keep local Dexie cached in sync
-      try { await db.sheets.put(sheet); } catch (_) {}
-      return sheet;
+      try { await db.sheets.put(loadedSheet); } catch (_) {}
     }
   } catch (err) {
     console.warn('Supabase fetch error, checking local storage:', err);
   }
 
   // 2. Fallback to Local IndexedDB
-  try {
-    const existing = await db.sheets.get(dateStr);
-    if (existing) {
-      if (existing.rooms.length < ROOM_DEFINITIONS.length) {
-        const mergedRooms = createInitialRooms().map(emptyRoom => {
-          const found = existing.rooms.find(r => r.roomNumber === emptyRoom.roomNumber);
-          return found || emptyRoom;
-        });
-        existing.rooms = mergedRooms;
-        existing.totals = computeSheetTotals(mergedRooms);
-      } else {
-        existing.totals = computeSheetTotals(existing.rooms);
+  if (!loadedSheet) {
+    try {
+      const existing = await db.sheets.get(dateStr);
+      if (existing) {
+        if (existing.rooms.length < ROOM_DEFINITIONS.length) {
+          const mergedRooms = createInitialRooms().map(emptyRoom => {
+            const found = existing.rooms.find(r => r.roomNumber === emptyRoom.roomNumber);
+            return found || emptyRoom;
+          });
+          existing.rooms = mergedRooms;
+          existing.totals = computeSheetTotals(mergedRooms);
+        } else {
+          existing.totals = computeSheetTotals(existing.rooms);
+        }
+        loadedSheet = existing;
       }
-      return existing;
+    } catch (err) {
+      console.warn('Error reading from IndexedDB:', err);
     }
-  } catch (err) {
-    console.warn('Error reading from IndexedDB:', err);
   }
 
-  return createNewDaySheet(dateStr);
+  if (!loadedSheet) {
+    loadedSheet = createNewDaySheet(dateStr);
+  }
+
+  // 3. Apply active stay-overs from preceding days
+  return await applyStayOversFromPrecedingDays(loadedSheet);
+}
+
+/**
+ * Checks past 14 days to see if any multi-day stays cover `sheet.date`.
+ * If any rooms in `sheet.rooms` are vacant or need updating from their primary stay, applies them.
+ */
+async function applyStayOversFromPrecedingDays(sheet: DaySheet): Promise<DaySheet> {
+  const targetDate = sheet.date;
+  const startDate = addDays(targetDate, -14);
+
+  try {
+    const { data, error } = await supabase
+      .from('day_sheets')
+      .select('*')
+      .gte('date', startDate)
+      .lt('date', targetDate)
+      .order('date', { ascending: true });
+
+    const precedingSheets: DaySheet[] = [];
+
+    if (!error && data && data.length > 0) {
+      data.forEach((row: any) => {
+        const rooms = (typeof row.rooms === 'string' ? JSON.parse(row.rooms) : row.rooms) || [];
+        precedingSheets.push({
+          date: row.date,
+          dayOfWeek: getWeekdayName(row.date),
+          rooms,
+          totals: computeSheetTotals(rooms),
+          notes: row.notes || '',
+          receptionistName: row.verified_by || '',
+          createdAt: row.created_at || '',
+          updatedAt: row.updated_at || '',
+        });
+      });
+    } else {
+      const localSheets = await db.sheets
+        .where('date')
+        .between(startDate, targetDate, true, false)
+        .toArray();
+      precedingSheets.push(...localSheets);
+    }
+
+    let modified = false;
+
+    precedingSheets.forEach(priorSheet => {
+      priorSheet.rooms.forEach(priorRoom => {
+        if (
+          priorRoom.stayDays &&
+          priorRoom.stayDays > 1 &&
+          priorRoom.checkInDate &&
+          priorRoom.checkOutDate &&
+          priorRoom.stayType !== 'stayover' &&
+          priorRoom.customerName?.trim()
+        ) {
+          if (targetDate > priorRoom.checkInDate && targetDate < priorRoom.checkOutDate) {
+            const currentRoom = sheet.rooms.find(r => r.roomNumber === priorRoom.roomNumber);
+            if (currentRoom) {
+              const isVacantOrMatching = !currentRoom.customerName || currentRoom.primaryStayDate === priorRoom.checkInDate || currentRoom.status === 'vacant';
+              if (isVacantOrMatching) {
+                const advCash = typeof priorRoom.advanceCash === 'number' ? priorRoom.advanceCash : 0;
+                const advOnline = typeof priorRoom.advanceOnline === 'number' ? priorRoom.advanceOnline : 0;
+                const tbCash = typeof priorRoom.tBusinessCash === 'number' ? priorRoom.tBusinessCash : 0;
+                const tbOnline = typeof priorRoom.tBusinessOnline === 'number' ? priorRoom.tBusinessOnline : 0;
+                const totalPaid = advCash + advOnline + tbCash + tbOnline;
+                const rent = typeof priorRoom.roomRent === 'number' ? priorRoom.roomRent : 0;
+                const remaining = rent > 0 ? Math.max(0, rent - totalPaid) : 0;
+
+                currentRoom.customerName = priorRoom.customerName;
+                currentRoom.platform = priorRoom.platform || 'Direct';
+                currentRoom.isAgoda = Boolean(priorRoom.isAgoda || priorRoom.platform === 'Agoda');
+                currentRoom.roomRent = ''; // no rent recharge on stayover
+                currentRoom.advanceCash = '';
+                currentRoom.advanceOnline = '';
+                currentRoom.status = 'occupied';
+                currentRoom.checkInDate = priorRoom.checkInDate;
+                currentRoom.checkOutDate = priorRoom.checkOutDate;
+                currentRoom.stayDays = priorRoom.stayDays;
+                currentRoom.stayType = 'stayover';
+                currentRoom.primaryStayDate = priorRoom.checkInDate;
+                currentRoom.stayPaidOnCheckIn = totalPaid;
+                currentRoom.stayBalanceRemaining = remaining;
+                modified = true;
+              }
+            }
+          }
+        }
+      });
+    });
+
+    if (modified) {
+      sheet.totals = computeSheetTotals(sheet.rooms);
+      try {
+        await db.sheets.put(sheet);
+      } catch (_) {}
+    }
+  } catch (err) {
+    console.warn('applyStayOversFromPrecedingDays error:', err);
+  }
+
+  return sheet;
+}
+
+/**
+ * Synchronizes multi-day stays initiated or modified on `sheet.date` forward to subsequent days.
+ * Also cleans up any previously scheduled stay-overs if a room is shortened or cleared.
+ */
+export async function syncMultiDayStays(sheet: DaySheet): Promise<void> {
+  const checkInDate = sheet.date;
+
+  const multiDayMap = new Map<string, {
+    stayDays: number;
+    checkOutDate: string;
+    customerName: string;
+    platform: string;
+    isAgoda: boolean;
+    paidOnCheckIn: number;
+    balanceRemaining: number;
+    notes?: string;
+  }>();
+
+  sheet.rooms.forEach(r => {
+    if (r.stayDays && r.stayDays > 1 && r.checkOutDate && r.stayType !== 'stayover' && r.customerName?.trim()) {
+      const advCash = typeof r.advanceCash === 'number' ? r.advanceCash : 0;
+      const advOnline = typeof r.advanceOnline === 'number' ? r.advanceOnline : 0;
+      const tbCash = typeof r.tBusinessCash === 'number' ? r.tBusinessCash : 0;
+      const tbOnline = typeof r.tBusinessOnline === 'number' ? r.tBusinessOnline : 0;
+      const totalPaid = advCash + advOnline + tbCash + tbOnline;
+      const rent = typeof r.roomRent === 'number' ? r.roomRent : 0;
+      const remaining = rent > 0 ? Math.max(0, rent - totalPaid) : 0;
+
+      multiDayMap.set(r.roomNumber, {
+        stayDays: r.stayDays,
+        checkOutDate: r.checkOutDate,
+        customerName: r.customerName,
+        platform: r.platform || 'Direct',
+        isAgoda: Boolean(r.isAgoda || r.platform === 'Agoda'),
+        paidOnCheckIn: totalPaid,
+        balanceRemaining: remaining,
+        notes: r.notes,
+      });
+    }
+  });
+
+  for (let offset = 1; offset <= 14; offset++) {
+    const targetDate = addDays(checkInDate, offset);
+    let targetSheet: DaySheet | null = null;
+
+    try {
+      targetSheet = await db.sheets.get(targetDate) || null;
+      if (!targetSheet) {
+        const { data } = await supabase.from('day_sheets').select('*').eq('date', targetDate).maybeSingle();
+        if (data) {
+          const parsedRooms = (typeof data.rooms === 'string' ? JSON.parse(data.rooms) : data.rooms) || [];
+          targetSheet = {
+            date: data.date,
+            dayOfWeek: getWeekdayName(data.date),
+            rooms: parsedRooms.length === ROOM_DEFINITIONS.length ? parsedRooms : createInitialRooms().map(empty => {
+              const found = parsedRooms.find((r: any) => r.roomNumber === empty.roomNumber);
+              return found || empty;
+            }),
+            totals: computeSheetTotals(parsedRooms),
+            notes: data.notes || '',
+            receptionistName: data.verified_by || 'Reception Desk',
+            createdAt: data.created_at || new Date().toISOString(),
+            updatedAt: data.updated_at || new Date().toISOString(),
+          };
+        }
+      }
+    } catch (_) {}
+
+    let hasChange = false;
+
+    ROOM_DEFINITIONS.forEach(def => {
+      const stayInfo = multiDayMap.get(def.roomNumber);
+      const isWithinStay = stayInfo && offset < stayInfo.stayDays && targetDate < stayInfo.checkOutDate;
+
+      if (isWithinStay && stayInfo) {
+        if (!targetSheet) {
+          targetSheet = createNewDaySheet(targetDate);
+        }
+        const room = targetSheet.rooms.find(r => r.roomNumber === def.roomNumber);
+        if (room) {
+          if (!room.customerName || room.primaryStayDate === checkInDate || room.status === 'vacant') {
+            room.customerName = stayInfo.customerName;
+            room.platform = stayInfo.platform;
+            room.isAgoda = stayInfo.isAgoda;
+            room.roomRent = '';
+            room.advanceCash = '';
+            room.advanceOnline = '';
+            room.tBusinessCash = typeof room.tBusinessCash === 'number' ? room.tBusinessCash : '';
+            room.tBusinessOnline = typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : '';
+            room.status = 'occupied';
+            room.checkInDate = checkInDate;
+            room.checkOutDate = stayInfo.checkOutDate;
+            room.stayDays = stayInfo.stayDays;
+            room.stayType = 'stayover';
+            room.primaryStayDate = checkInDate;
+            room.stayPaidOnCheckIn = stayInfo.paidOnCheckIn;
+            room.stayBalanceRemaining = stayInfo.balanceRemaining;
+            hasChange = true;
+          }
+        }
+      } else if (targetSheet) {
+        const room = targetSheet.rooms.find(r => r.roomNumber === def.roomNumber);
+        if (room && room.primaryStayDate === checkInDate) {
+          const empty = createEmptyRoomEntry(def);
+          Object.assign(room, empty);
+          hasChange = true;
+        }
+      }
+    });
+
+    if (hasChange && targetSheet) {
+      targetSheet.totals = computeSheetTotals(targetSheet.rooms);
+      targetSheet.updatedAt = new Date().toISOString();
+      try {
+        await db.sheets.put(targetSheet);
+        await supabase.from('day_sheets').upsert({
+          date: targetSheet.date,
+          rooms: targetSheet.rooms,
+          totals: targetSheet.totals,
+          notes: targetSheet.notes || '',
+          verified_by: targetSheet.receptionistName || '',
+          updated_at: targetSheet.updatedAt,
+        }, { onConflict: 'date' });
+      } catch (err) {
+        console.warn('Error saving synced targetSheet:', err);
+      }
+    }
+  }
 }
 
 export async function saveDaySheet(sheet: DaySheet): Promise<void> {
@@ -160,6 +409,9 @@ export async function saveDaySheet(sheet: DaySheet): Promise<void> {
   } catch (cloudErr) {
     console.error('Failed to sync to Supabase cloud:', cloudErr);
   }
+
+  // 3. Sync multi-day stay reservations forward asynchronously
+  syncMultiDayStays(sheet).catch(err => console.error('syncMultiDayStays error:', err));
 }
 
 export async function getMonthSummary(year: number, month: number): Promise<MonthSummary> {

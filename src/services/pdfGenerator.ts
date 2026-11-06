@@ -173,10 +173,22 @@ export function generateDailyPDF(sheet: DaySheet) {
   const tableBody: RowInput[] = sheet.rooms.map((r) => {
     const isOnlinePlatform = Boolean(r.platform && r.platform !== 'Direct' && r.platform.trim().length > 0);
     const platformLabel = isOnlinePlatform ? r.platform.trim() : '';
+    const isStayOver = r.stayType === 'stayover';
 
     let customerCellText = r.customerName || '';
-    if (isOnlinePlatform) {
+    if (isStayOver) {
+      customerCellText = customerCellText ? `${customerCellText} [Reserved]` : `[Reserved]`;
+    } else if (isOnlinePlatform) {
       customerCellText = customerCellText ? `${customerCellText} [${platformLabel}]` : `[${platformLabel}]`;
+    }
+
+    let paidCellContent = formatNum(r.total);
+    if (isStayOver && (r.total === '' || !r.total)) {
+      if (r.stayBalanceRemaining === 0 || (r.stayPaidOnCheckIn && r.stayPaidOnCheckIn > 0 && !r.stayBalanceRemaining)) {
+        paidCellContent = 'PAID';
+      } else if (r.stayBalanceRemaining && r.stayBalanceRemaining > 0) {
+        paidCellContent = `${formatNum(r.stayBalanceRemaining)} Left`;
+      }
     }
 
     return [
@@ -190,18 +202,18 @@ export function generateDailyPDF(sheet: DaySheet) {
           textColor: HEX_TEXT,
         } 
       },
-      { content: formatNum(r.roomRent), styles: { halign: 'right' as const } },
+      { content: isStayOver ? '-' : formatNum(r.roomRent), styles: { halign: 'right' as const } },
       { 
         content: customerCellText, 
         styles: { 
           halign: 'left' as const, 
-          fontStyle: isOnlinePlatform ? 'bold' as const : 'normal' as const,
-          textColor: isOnlinePlatform ? HEX_ACCENT : HEX_TEXT,
+          fontStyle: isOnlinePlatform || isStayOver ? 'bold' as const : 'normal' as const,
+          textColor: isStayOver ? '#92400E' : isOnlinePlatform ? HEX_ACCENT : HEX_TEXT,
         } 
       },
-      // In online platforms there is no advance option: show '-'
-      { content: isOnlinePlatform ? '-' : formatNum(r.advanceCash), styles: { halign: 'right' as const, textColor: isOnlinePlatform ? HEX_TEXT_LIGHT : HEX_TEXT } },
-      { content: isOnlinePlatform ? '-' : formatNum(r.advanceOnline), styles: { halign: 'right' as const, textColor: isOnlinePlatform ? HEX_TEXT_LIGHT : HEX_TEXT } },
+      // In online platforms or stay-overs there is no advance option: show '-'
+      { content: isOnlinePlatform || isStayOver ? '-' : formatNum(r.advanceCash), styles: { halign: 'right' as const, textColor: isOnlinePlatform || isStayOver ? HEX_TEXT_LIGHT : HEX_TEXT } },
+      { content: isOnlinePlatform || isStayOver ? '-' : formatNum(r.advanceOnline), styles: { halign: 'right' as const, textColor: isOnlinePlatform || isStayOver ? HEX_TEXT_LIGHT : HEX_TEXT } },
       { content: formatNum(r.tBusinessCash), styles: { halign: 'right' as const } },
       { 
         content: formatNum(r.tBusinessOnline), 
@@ -214,8 +226,8 @@ export function generateDailyPDF(sheet: DaySheet) {
       { content: formatNum(r.gst5), styles: { halign: 'right' as const } },
       { content: formatNum(r.balance), styles: { halign: 'right' as const } },
       { content: formatNum(r.refund), styles: { halign: 'right' as const } },
-      { content: formatNum(r.total), styles: { halign: 'right' as const, fontStyle: 'bold' as const } },
-      { content: r.checkOut || '', styles: { halign: 'center' as const } },
+      { content: paidCellContent, styles: { halign: 'right' as const, fontStyle: 'bold' as const, textColor: paidCellContent === 'PAID' ? '#047857' : paidCellContent.includes('Left') ? '#E11D48' : HEX_TEXT } },
+      { content: r.checkOut || (isStayOver && r.checkOutDate ? `Dep: ${r.checkOutDate.slice(5)}` : ''), styles: { halign: 'center' as const } },
     ];
   });
 

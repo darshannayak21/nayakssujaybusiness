@@ -18,6 +18,15 @@ export interface RoomEntry {
   checkOut: string;
   status: 'vacant' | 'occupied' | 'checkout';
   notes?: string;
+
+  // Multi-day stay support
+  checkInDate?: string;          // Check-in date (YYYY-MM-DD)
+  checkOutDate?: string;         // Check-out date (YYYY-MM-DD)
+  stayDays?: number;             // Total number of nights
+  stayType?: 'checkin' | 'stayover'; // 'checkin' on primary date, 'stayover' on following days
+  primaryStayDate?: string;      // Primary check-in date (YYYY-MM-DD)
+  stayPaidOnCheckIn?: number;    // Total amount already paid on check-in day
+  stayBalanceRemaining?: number; // Total remaining balance from check-in day
 }
 
 export interface DaySheetTotals {
