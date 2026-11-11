@@ -165,8 +165,6 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
   let balance = 0;
   let refund = 0;
   let total = 0;
-  let occupiedRooms = 0;
-  let checkedOutRooms = 0;
   let agodaBookingsCount = 0;
 
   const platformTotals: Record<string, number> = {};
@@ -251,14 +249,40 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
     );
 
     if (isCheckedOut) {
-      checkedOutRooms++;
       r.status = 'checkout';
     } else if (hasActiveEntry) {
-      occupiedRooms++;
       r.status = 'occupied';
     } else {
       r.status = 'vacant';
     }
+  });
+
+  // Distinct physical room occupancy determination (each physical room 101-303 counted once):
+  // 1. A physical room is 'occupied' if ANY entry for that room is currently active ('occupied').
+  // 2. Otherwise, it is 'checkout' if ANY entry for that room was checked out ('checkout').
+  // 3. Otherwise, it is 'vacant'.
+  const physicalRoomStatus = new Map<string, 'occupied' | 'checkout' | 'vacant'>();
+  ROOM_DEFINITIONS.forEach(def => {
+    physicalRoomStatus.set(def.roomNumber, 'vacant');
+  });
+
+  rooms.forEach(r => {
+    const current = physicalRoomStatus.get(r.roomNumber);
+    if (r.status === 'occupied') {
+      physicalRoomStatus.set(r.roomNumber, 'occupied');
+    } else if (r.status === 'checkout' && current !== 'occupied') {
+      physicalRoomStatus.set(r.roomNumber, 'checkout');
+    }
+  });
+
+  let occupiedRooms = 0;
+  let checkedOutRooms = 0;
+  let vacantRooms = 0;
+
+  physicalRoomStatus.forEach(status => {
+    if (status === 'occupied') occupiedRooms++;
+    else if (status === 'checkout') checkedOutRooms++;
+    else vacantRooms++;
   });
 
   const advanceTotal = advanceCash + advanceOnline;
@@ -271,14 +295,6 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
   
   // Day total: Advance + Cash + sum(all online platforms) + Other Online
   const dayTotal = advanceTotal + tBusinessCash + platformsOnlineSum + tBusinessOtherOnline;
-
-  // Distinct physical rooms occupied or checked out
-  const occupiedRoomNumbers = new Set(
-    rooms
-      .filter(r => r.status === 'occupied' || r.status === 'checkout')
-      .map(r => r.roomNumber)
-  );
-  const vacantRooms = Math.max(0, ROOM_DEFINITIONS.filter(def => !occupiedRoomNumbers.has(def.roomNumber)).length);
 
   return {
     roomRent,
