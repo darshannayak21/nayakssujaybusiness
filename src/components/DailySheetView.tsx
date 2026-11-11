@@ -11,10 +11,12 @@ import {
   BedDouble,
   LayoutList,
   Table as TableIcon,
-  Globe
+  Globe,
+  Plus,
+  X
 } from 'lucide-react';
 import { DaySheet, RoomEntry } from '../types';
-import { calculateRoomTotal, computeSheetTotals } from '../data/rooms';
+import { calculateRoomTotal, computeSheetTotals, createEmptyRoomEntry, ROOM_DEFINITIONS } from '../data/rooms';
 import { formatDateForDisplay } from '../services/db';
 import { generateDailyPDF } from '../services/pdfGenerator';
 import { getBookingPlatforms } from '../services/platforms';
@@ -238,6 +240,61 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
 
     onUpdateSheet(updatedSheet);
     setTimeout(() => setSaveStatus('saved'), 350);
+  };
+
+  const handleAddExtraRoomEntry = (roomIndex: number) => {
+    const targetRoom = sheet.rooms[roomIndex];
+    if (!targetRoom) return;
+
+    setSaveStatus('saving');
+    const newRooms = [...sheet.rooms];
+
+    const def = ROOM_DEFINITIONS.find(d => d.roomNumber === targetRoom.roomNumber) || {
+      slNo: targetRoom.slNo,
+      roomNumber: targetRoom.roomNumber,
+      floor: targetRoom.floor,
+    };
+
+    const extraRoom: RoomEntry = {
+      ...createEmptyRoomEntry(def),
+      isExtraEntry: true,
+      extraEntryIndex: 2,
+      checkInDate: sheet.date,
+    };
+
+    // Insert directly below the target room
+    newRooms.splice(roomIndex + 1, 0, extraRoom);
+
+    const totals = computeSheetTotals(newRooms);
+    const updatedSheet: DaySheet = {
+      ...sheet,
+      rooms: newRooms,
+      totals,
+      updatedAt: new Date().toISOString(),
+    };
+
+    onUpdateSheet(updatedSheet);
+    setTimeout(() => setSaveStatus('saved'), 350);
+  };
+
+  const handleRemoveExtraRoomEntry = (roomIndex: number) => {
+    const targetRoom = sheet.rooms[roomIndex];
+    if (!targetRoom || !targetRoom.isExtraEntry) return;
+
+    if (window.confirm(`Remove second booking entry for Room ${targetRoom.roomNumber}?`)) {
+      setSaveStatus('saving');
+      const newRooms = sheet.rooms.filter((_, idx) => idx !== roomIndex);
+      const totals = computeSheetTotals(newRooms);
+      const updatedSheet: DaySheet = {
+        ...sheet,
+        rooms: newRooms,
+        totals,
+        updatedAt: new Date().toISOString(),
+      };
+
+      onUpdateSheet(updatedSheet);
+      setTimeout(() => setSaveStatus('saved'), 350);
+    }
   };
 
   const filteredRooms = sheet.rooms.map((r, idx) => ({ ...r, originalIndex: idx })).filter(r => {
@@ -489,7 +546,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
 
             return (
               <div
-                key={room.roomNumber}
+                key={`${room.roomNumber}-${room.originalIndex}`}
                 className={`bg-white rounded-2xl border p-4 shadow-2xs transition-all ${
                   isStayOver
                     ? 'border-amber-300 bg-amber-50/15'
@@ -499,10 +556,15 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                 }`}
               >
                 <div className="flex items-center justify-between border-b border-plaza-line/30 pb-2 mb-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="w-10 h-7 rounded-lg bg-plaza-accent-tint text-plaza-text font-bold text-sm flex items-center justify-center">
                       {room.roomNumber}
                     </span>
+                    {room.isExtraEntry && (
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-plaza-accent text-white uppercase tracking-wider">
+                        2nd Entry
+                      </span>
+                    )}
                     <span className="text-[10px] uppercase font-bold text-plaza-text-3">
                       Floor {room.floor}
                     </span>
@@ -528,7 +590,28 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                     ) : null}
                   </div>
                   
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    {room.isExtraEntry ? (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveExtraRoomEntry(room.originalIndex)}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-600 text-[10px] font-bold hover:bg-rose-100 transition"
+                      >
+                        <X className="w-3 h-3" />
+                        Remove
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleAddExtraRoomEntry(room.originalIndex)}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-plaza-accent/40 bg-plaza-accent-tint text-plaza-accent text-[10px] font-bold hover:bg-plaza-accent hover:text-white transition"
+                        title={`Add second booking for Room ${room.roomNumber}`}
+                      >
+                        <Plus className="w-3 h-3" />
+                        2nd Booking
+                      </button>
+                    )}
+
                     {/* Stay Dates button */}
                     <button
                       type="button"
@@ -922,7 +1005,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
 
               <tbody>
                 {sheet.rooms.map((room, idx) => {
-                  const isNewFloor = idx === 0 || idx === 10 || idx === 23;
+                  const isNewFloor = idx === 0 || room.floor !== sheet.rooms[idx - 1]?.floor;
                   const isOnlinePlatform = Boolean(room.platform && room.platform !== 'Direct');
                   const platformLabel = isOnlinePlatform ? room.platform : '';
 
@@ -961,19 +1044,51 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
 
                   return (
                     <tr
-                      key={room.roomNumber}
+                      key={`${room.roomNumber}-${idx}`}
                       className={`hover:bg-amber-50/20 transition-colors border-b border-plaza-line/60 ${
                         isStayOver ? 'bg-amber-50/10' : ''
                       } ${isNewFloor ? 'border-t-2 border-t-plaza-accent' : ''}`}
                     >
                       {/* SL NO - Sticky on mobile */}
                       <td className="border-r border-plaza-line text-center py-1.5 px-2 font-mono text-plaza-text-3 text-[11px] sticky left-0 bg-white z-10">
-                        {room.slNo}
+                        {room.isExtraEntry ? `${room.slNo}B` : room.slNo}
                       </td>
 
                       {/* ROOM NUMBER - Sticky on mobile */}
                       <td className="border-r border-plaza-line text-center py-1.5 px-2 font-bold text-plaza-text bg-plaza-accent-tint sticky left-10 z-10">
-                        {room.roomNumber}
+                        <div className="flex items-center justify-center gap-1.5 group/room">
+                          <span>{room.roomNumber}</span>
+                          {room.isExtraEntry ? (
+                            <div className="inline-flex items-center gap-0.5">
+                              <span className="text-[8px] px-1 py-0.5 rounded-full bg-plaza-accent text-white font-bold tracking-wider leading-none select-none">
+                                2ND
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveExtraRoomEntry(idx);
+                                }}
+                                className="p-0.5 rounded text-plaza-text-4 hover:text-rose-600 hover:bg-rose-100/70 transition"
+                                title={`Remove 2nd booking for Room ${room.roomNumber}`}
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAddExtraRoomEntry(idx);
+                              }}
+                              className="w-4 h-4 rounded-md flex items-center justify-center text-plaza-accent/70 hover:text-white hover:bg-plaza-accent bg-white/70 border border-plaza-accent/30 shadow-2xs transition"
+                              title={`Add 2nd booking for Room ${room.roomNumber}`}
+                            >
+                              <Plus className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       {/* ROOM RENT */}

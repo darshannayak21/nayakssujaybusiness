@@ -30,6 +30,10 @@ export interface RoomEntry {
   primaryStayDate?: string;      // Primary check-in date (YYYY-MM-DD)
   stayPaidOnCheckIn?: number;    // Total amount already paid on check-in day
   stayBalanceRemaining?: number; // Total remaining balance from check-in day
+
+  // Extra booking entry support (e.g. room booked twice in one day)
+  isExtraEntry?: boolean;
+  extraEntryIndex?: number;
 }
 
 export interface DaySheetTotals {

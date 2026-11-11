@@ -234,10 +234,13 @@ export function generateDailyPDF(sheet: DaySheet) {
       advOnlineCellText = `${formatNum(r.advanceOnline)}\n[${formatShortDate(r.advanceOnlineDate)}]`;
     }
 
+    const displaySlNo = r.isExtraEntry ? `${r.slNo}B` : String(r.slNo);
+    const displayRoomNumber = r.isExtraEntry ? `${r.roomNumber} (2nd)` : r.roomNumber;
+
     return [
-      { content: String(r.slNo), styles: { halign: 'center' as const } },
+      { content: displaySlNo, styles: { halign: 'center' as const } },
       { 
-        content: r.roomNumber, 
+        content: displayRoomNumber, 
         styles: { 
           halign: 'center' as const, 
           fontStyle: 'bold' as const, 
@@ -315,6 +318,12 @@ export function generateDailyPDF(sheet: DaySheet) {
 
   tableBody.push(totalRow);
 
+  // Dynamic compact sizing to guarantee strict 1-page fit even when extra room entries exist
+  const rowCount = tableBody.length; // total rows including TOTAL row
+  const extraRows = Math.max(0, rowCount - 27);
+  const vPad = Math.max(0.65, 1.15 - extraRows * 0.08);
+  const tableFontSize = Math.max(5.8, 6.8 - extraRows * 0.12);
+
   // AutoTable configured with compact heights to guarantee strict 1-page fit
   autoTable(doc, {
     startY: 22,
@@ -326,11 +335,11 @@ export function generateDailyPDF(sheet: DaySheet) {
     rowPageBreak: 'avoid',
     styles: {
       font: 'helvetica',
-      fontSize: 6.8,
+      fontSize: tableFontSize,
       textColor: HEX_TEXT,
       lineColor: HEX_LINE,
       lineWidth: 0.14,
-      cellPadding: { top: 1.15, bottom: 1.15, left: 1.2, right: 1.2 },
+      cellPadding: { top: vPad, bottom: vPad, left: 1.1, right: 1.1 },
       overflow: 'ellipsize',
     },
     headStyles: {
@@ -357,14 +366,18 @@ export function generateDailyPDF(sheet: DaySheet) {
       12: { cellWidth: 15 }, // CHECK OUT
     },
     didDrawCell: (data) => {
-      // Floor divider lines
-      if (data.section === 'body' && (data.row.index === 10 || data.row.index === 23)) {
-        doc.setDrawColor(RGB_ACCENT[0], RGB_ACCENT[1], RGB_ACCENT[2]);
-        doc.setLineWidth(0.35);
-        doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y);
+      // Floor divider lines: draw when moving to a new floor in the body
+      if (data.section === 'body' && data.row.index > 0 && data.row.index < sheet.rooms.length) {
+        const currFloor = sheet.rooms[data.row.index]?.floor;
+        const prevFloor = sheet.rooms[data.row.index - 1]?.floor;
+        if (currFloor !== prevFloor) {
+          doc.setDrawColor(RGB_ACCENT[0], RGB_ACCENT[1], RGB_ACCENT[2]);
+          doc.setLineWidth(0.35);
+          doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y);
+        }
       }
-      // Top line of total row
-      if (data.section === 'body' && data.row.index === 26) {
+      // Top line of total row (always at index === sheet.rooms.length)
+      if (data.section === 'body' && data.row.index === sheet.rooms.length) {
         doc.setDrawColor(RGB_TEXT[0], RGB_TEXT[1], RGB_TEXT[2]);
         doc.setLineWidth(0.4);
         doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y);

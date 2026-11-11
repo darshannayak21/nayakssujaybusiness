@@ -1,6 +1,6 @@
 import Dexie, { Table } from 'dexie';
 import { DaySheet, MonthSummary, MonthSummaryDay, MonthPerformance, YearSummary } from '../types';
-import { ROOM_DEFINITIONS, createInitialRooms, createEmptyRoomEntry, computeSheetTotals } from '../data/rooms';
+import { ROOM_DEFINITIONS, createInitialRooms, createEmptyRoomEntry, computeSheetTotals, normalizeDaySheetRooms } from '../data/rooms';
 import { supabase } from './supabase';
 import { getBookingPlatforms } from './platforms';
 
@@ -93,7 +93,8 @@ export async function getDaySheet(dateStr: string): Promise<DaySheet> {
       .maybeSingle();
 
     if (!error && data) {
-      const parsedRooms = (typeof data.rooms === 'string' ? JSON.parse(data.rooms) : data.rooms) || [];
+      const rawRooms = (typeof data.rooms === 'string' ? JSON.parse(data.rooms) : data.rooms) || [];
+      const parsedRooms = normalizeDaySheetRooms(rawRooms);
       const configuredPlatforms = getBookingPlatforms();
       parsedRooms.forEach((r: any) => {
         if (!r.platform) {
@@ -109,10 +110,7 @@ export async function getDaySheet(dateStr: string): Promise<DaySheet> {
       loadedSheet = {
         date: data.date,
         dayOfWeek: getWeekdayName(data.date),
-        rooms: parsedRooms.length === ROOM_DEFINITIONS.length ? parsedRooms : createInitialRooms().map(empty => {
-          const found = parsedRooms.find((r: any) => r.roomNumber === empty.roomNumber);
-          return found || empty;
-        }),
+        rooms: parsedRooms,
         totals: computedTotals,
         notes: data.notes || '',
         receptionistName: data.verified_by || 'Reception Desk',
@@ -131,8 +129,9 @@ export async function getDaySheet(dateStr: string): Promise<DaySheet> {
     try {
       const existing = await db.sheets.get(dateStr);
       if (existing) {
+        const parsedRooms = normalizeDaySheetRooms(existing.rooms);
         const configuredPlatforms = getBookingPlatforms();
-        existing.rooms.forEach((r: any) => {
+        parsedRooms.forEach((r: any) => {
           if (!r.platform) {
             r.platform = r.isAgoda ? 'Agoda' : 'Direct';
           }
@@ -142,16 +141,8 @@ export async function getDaySheet(dateStr: string): Promise<DaySheet> {
             r.platform = 'Direct';
           }
         });
-        if (existing.rooms.length < ROOM_DEFINITIONS.length) {
-          const mergedRooms = createInitialRooms().map(emptyRoom => {
-            const found = existing.rooms.find(r => r.roomNumber === emptyRoom.roomNumber);
-            return found || emptyRoom;
-          });
-          existing.rooms = mergedRooms;
-          existing.totals = computeSheetTotals(mergedRooms);
-        } else {
-          existing.totals = computeSheetTotals(existing.rooms);
-        }
+        existing.rooms = parsedRooms;
+        existing.totals = computeSheetTotals(parsedRooms);
         loadedSheet = existing;
       }
     } catch (err) {
@@ -220,7 +211,8 @@ async function applyStayOversFromPrecedingDays(sheet: DaySheet): Promise<DayShee
           priorRoom.customerName?.trim()
         ) {
           if (targetDate > priorRoom.checkInDate && targetDate < priorRoom.checkOutDate) {
-            const currentRoom = sheet.rooms.find(r => r.roomNumber === priorRoom.roomNumber);
+            const currentRoom = sheet.rooms.find(r => r.roomNumber === priorRoom.roomNumber && !r.isExtraEntry) 
+                             || sheet.rooms.find(r => r.roomNumber === priorRoom.roomNumber);
             if (currentRoom) {
               const isVacantOrMatching = !currentRoom.customerName || currentRoom.primaryStayDate === priorRoom.checkInDate || currentRoom.status === 'vacant';
               if (isVacantOrMatching) {
@@ -354,14 +346,12 @@ export async function syncMultiDayStays(sheet: DaySheet): Promise<void> {
       if (!targetSheet) {
         const { data } = await supabase.from('day_sheets').select('*').eq('date', targetDate).maybeSingle();
         if (data) {
-          const parsedRooms = (typeof data.rooms === 'string' ? JSON.parse(data.rooms) : data.rooms) || [];
+          const rawRooms = (typeof data.rooms === 'string' ? JSON.parse(data.rooms) : data.rooms) || [];
+          const parsedRooms = normalizeDaySheetRooms(rawRooms);
           targetSheet = {
             date: data.date,
             dayOfWeek: getWeekdayName(data.date),
-            rooms: parsedRooms.length === ROOM_DEFINITIONS.length ? parsedRooms : createInitialRooms().map(empty => {
-              const found = parsedRooms.find((r: any) => r.roomNumber === empty.roomNumber);
-              return found || empty;
-            }),
+            rooms: parsedRooms,
             totals: computeSheetTotals(parsedRooms),
             notes: data.notes || '',
             receptionistName: data.verified_by || 'Reception Desk',
@@ -382,7 +372,8 @@ export async function syncMultiDayStays(sheet: DaySheet): Promise<void> {
         if (!targetSheet) {
           targetSheet = createNewDaySheet(targetDate);
         }
-        const room = targetSheet.rooms.find(r => r.roomNumber === def.roomNumber);
+        const room = targetSheet.rooms.find(r => r.roomNumber === def.roomNumber && !r.isExtraEntry) 
+                  || targetSheet.rooms.find(r => r.roomNumber === def.roomNumber);
         if (room) {
           if (!room.customerName || room.primaryStayDate === checkInDate || room.status === 'vacant') {
             room.customerName = stayInfo.customerName;
@@ -407,14 +398,16 @@ export async function syncMultiDayStays(sheet: DaySheet): Promise<void> {
       } else if (stayOverUpdateMap.has(def.roomNumber)) {
         const soInfo = stayOverUpdateMap.get(def.roomNumber)!;
         if (targetDate < soInfo.checkOutDate && targetSheet) {
-          const room = targetSheet.rooms.find(r => r.roomNumber === def.roomNumber);
+          const room = targetSheet.rooms.find(r => r.roomNumber === def.roomNumber && !r.isExtraEntry) 
+                    || targetSheet.rooms.find(r => r.roomNumber === def.roomNumber);
           if (room && (room.primaryStayDate === soInfo.primaryStayDate || room.stayType === 'stayover')) {
             room.stayBalanceRemaining = soInfo.remainingAfterToday;
             hasChange = true;
           }
         }
       } else if (targetSheet && multiDayMap.has(def.roomNumber)) {
-        const room = targetSheet.rooms.find(r => r.roomNumber === def.roomNumber);
+        const room = targetSheet.rooms.find(r => r.roomNumber === def.roomNumber && !r.isExtraEntry) 
+                  || targetSheet.rooms.find(r => r.roomNumber === def.roomNumber);
         if (room && room.primaryStayDate === checkInDate) {
           const empty = createEmptyRoomEntry(def);
           Object.assign(room, empty);
@@ -764,6 +757,7 @@ export async function cleanupDeletedPlatformFromSheets(deletedPlatform: string):
   const norm = deletedPlatform.trim().toLowerCase();
   if (!norm) return;
   try {
+    // 1. Clean local Dexie sheets
     const allSheets = await db.sheets.toArray();
     for (const sheet of allSheets) {
       if (sheet.date === 'CONFIG_PLATFORMS') continue;
@@ -791,6 +785,35 @@ export async function cleanupDeletedPlatformFromSheets(deletedPlatform: string):
         } catch (_) {}
       }
     }
+
+    // 2. Also clean cloud Supabase day_sheets rows directly
+    try {
+      const { data } = await supabase.from('day_sheets').select('*').neq('date', 'CONFIG_PLATFORMS');
+      if (data && data.length > 0) {
+        for (const row of data) {
+          const rooms = (typeof row.rooms === 'string' ? JSON.parse(row.rooms) : row.rooms) || [];
+          let cloudChanges = false;
+          rooms.forEach((r: any) => {
+            if (r.platform && r.platform.trim().toLowerCase() === norm) {
+              const hasSales = (typeof r.tBusinessOnline === 'number' && r.tBusinessOnline > 0) ||
+                               (typeof r.roomRent === 'number' && r.roomRent > 0);
+              if (!hasSales) {
+                r.platform = 'Direct';
+                cloudChanges = true;
+              }
+            }
+          });
+          if (cloudChanges) {
+            const totals = computeSheetTotals(rooms);
+            await supabase.from('day_sheets').update({
+              rooms,
+              totals,
+              updated_at: new Date().toISOString(),
+            }).eq('date', row.date);
+          }
+        }
+      }
+    } catch (_) {}
   } catch (err) {
     console.warn('cleanupDeletedPlatformFromSheets error:', err);
   }

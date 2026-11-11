@@ -10,6 +10,7 @@ import {
 import { MonthSummary } from '../types';
 import { getMonthSummary, getDaySheet } from '../services/db';
 import { generateMonthlyPDF, generateDailyPDF } from '../services/pdfGenerator';
+import { getBookingPlatforms } from '../services/platforms';
 
 interface MonthlyViewProps {
   initialYear?: number;
@@ -146,182 +147,199 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
         </div>
       </div>
 
-      {/* Monthly Summary Cards Matching Notebook Columns */}
-      {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-8">
-          <div className="bg-plaza-card rounded-2xl p-4 border border-plaza-line/40">
-            <span className="text-[10px] font-semibold tracking-wider uppercase text-plaza-text-3">
-              Total Month Revenue
-            </span>
-            <div className="text-xl lg:text-2xl font-bold text-plaza-text tracking-tight mt-1.5">
-              ₹{summary.totalRevenue.toLocaleString('en-IN')}
-            </div>
-            <div className="text-[11px] text-plaza-text-3 mt-1">
-              Combined day totals
-            </div>
-          </div>
+      {(() => {
+        const configured = getBookingPlatforms();
+        const rawPlatforms = summary?.activePlatforms && summary.activePlatforms.length > 0 
+          ? summary.activePlatforms 
+          : configured;
+        const filteredPlatforms = rawPlatforms.filter(p => {
+          if (configured.some(cp => cp.toLowerCase() === p.toLowerCase())) return true;
+          const tot = summary?.platformTotals?.[p] || (p.toLowerCase() === 'agoda' ? summary?.totalAgoda || 0 : 0) || 0;
+          return tot > 0;
+        });
+        const displayPlatforms = filteredPlatforms.length > 0 ? filteredPlatforms : (configured.length > 0 ? configured : ['Agoda']);
 
-          <div className="bg-plaza-card rounded-2xl p-4 border border-plaza-line/40">
-            <span className="text-[10px] font-semibold tracking-wider uppercase text-plaza-text-3">
-              Total Cash Collected
-            </span>
-            <div className="text-xl lg:text-2xl font-bold text-plaza-text tracking-tight mt-1.5">
-              ₹{summary.totalCash.toLocaleString('en-IN')}
-            </div>
-            <div className="text-[11px] text-plaza-text-3 mt-1">
-              T. Business Cash column
-            </div>
-          </div>
-
-          {/* Dynamic Platform Cards */}
-          {(summary.activePlatforms || ['Agoda']).map((plat) => {
-            const tot = summary.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? summary.totalAgoda : 0);
-            return (
-              <div key={plat} className="bg-plaza-card rounded-2xl p-4 border border-plaza-line/40">
-                <span className="text-[10px] font-semibold tracking-wider uppercase text-plaza-accent">
-                  Total Online ({plat})
-                </span>
-                <div className="text-xl lg:text-2xl font-bold text-plaza-accent tracking-tight mt-1.5">
-                  ₹{tot.toLocaleString('en-IN')}
+        return (
+          <>
+            {/* Monthly Summary Cards Matching Notebook Columns */}
+            {summary && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-8">
+                <div className="bg-plaza-card rounded-2xl p-4 border border-plaza-line/40">
+                  <span className="text-[10px] font-semibold tracking-wider uppercase text-plaza-text-3">
+                    Total Month Revenue
+                  </span>
+                  <div className="text-xl lg:text-2xl font-bold text-plaza-text tracking-tight mt-1.5">
+                    ₹{summary.totalRevenue.toLocaleString('en-IN')}
+                  </div>
+                  <div className="text-[11px] text-plaza-text-3 mt-1">
+                    Combined day totals
+                  </div>
                 </div>
-                <div className="text-[11px] text-plaza-text-3 mt-1">
-                  Bookings via {plat}
+
+                <div className="bg-plaza-card rounded-2xl p-4 border border-plaza-line/40">
+                  <span className="text-[10px] font-semibold tracking-wider uppercase text-plaza-text-3">
+                    Total Cash Collected
+                  </span>
+                  <div className="text-xl lg:text-2xl font-bold text-plaza-text tracking-tight mt-1.5">
+                    ₹{summary.totalCash.toLocaleString('en-IN')}
+                  </div>
+                  <div className="text-[11px] text-plaza-text-3 mt-1">
+                    T. Business Cash column
+                  </div>
                 </div>
-              </div>
-            );
-          })}
 
-          <div className="bg-plaza-card rounded-2xl p-4 border border-plaza-line/40">
-            <span className="text-[10px] font-semibold tracking-wider uppercase text-plaza-text-3">
-              Total Online (Others)
-            </span>
-            <div className="text-xl lg:text-2xl font-bold text-plaza-text tracking-tight mt-1.5">
-              ₹{summary.totalOtherOnline.toLocaleString('en-IN')}
-            </div>
-            <div className="text-[11px] text-plaza-text-3 mt-1">
-              Direct digital payments
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content: Exact Table Format from Image 1 - Horizontal Landscape */}
-      {activeTab === 'table' && summary && (
-        <div className="bg-white rounded-2xl border border-plaza-line shadow-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse min-w-[950px]">
-              <thead>
-                <tr className="bg-plaza-card border-b border-plaza-line text-[10px] uppercase font-bold text-plaza-text">
-                  <th className="p-3 text-center w-14">SR. NO.</th>
-                  <th className="p-3 text-center w-24">DATE</th>
-                  <th className="p-3 text-right">ADVANCE</th>
-                  <th className="p-3 text-right">CASH</th>
-                  {(summary.activePlatforms || ['Agoda']).map((plat) => (
-                    <th key={plat} className="p-3 text-right text-plaza-accent whitespace-nowrap">
-                      ONLINE ({plat.toUpperCase()})
-                    </th>
-                  ))}
-                  <th className="p-3 text-right whitespace-nowrap">ONLINE (OTHERS)</th>
-                  <th className="p-3 text-right font-bold text-plaza-text whitespace-nowrap">(DAY TOTAL)</th>
-                  <th className="p-3 text-center w-20">ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-plaza-line/50">
-                {summary.days.map((day) => {
+                {/* Dynamic Platform Cards */}
+                {displayPlatforms.map((plat) => {
+                  const tot = summary.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? summary.totalAgoda : 0);
                   return (
-                    <tr
-                      key={day.date}
-                      onClick={() => onSelectDay(day.date)}
-                      className="hover:bg-plaza-accent-tint/30 cursor-pointer transition-colors"
-                    >
-                      <td className="p-3 text-center font-mono font-medium text-plaza-text-3">
-                        {day.dayNumber}
-                      </td>
-                      <td className="p-3 text-center font-mono font-semibold text-plaza-text">
-                        {day.formattedDate}
-                      </td>
-                      <td className="p-3 text-right text-plaza-text-2">
-                        {day.advanceTotal > 0 ? `₹${day.advanceTotal.toLocaleString('en-IN')}` : '—'}
-                      </td>
-                      <td className="p-3 text-right text-plaza-text-2">
-                        {day.tBusinessCash > 0 ? `₹${day.tBusinessCash.toLocaleString('en-IN')}` : '—'}
-                      </td>
-                      {(summary.activePlatforms || ['Agoda']).map((plat) => {
-                        const amt = day.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? day.agodaOnline : 0);
-                        return (
-                          <td key={plat} className="p-3 text-right font-semibold text-plaza-accent">
-                            {amt > 0 ? `₹${amt.toLocaleString('en-IN')}` : '—'}
-                          </td>
-                        );
-                      })}
-                      <td className="p-3 text-right text-plaza-text-2">
-                        {day.otherOnline > 0 ? `₹${day.otherOnline.toLocaleString('en-IN')}` : '—'}
-                      </td>
-                      <td className="p-3 text-right font-bold text-plaza-text">
-                        {day.dayTotal > 0 ? `₹${day.dayTotal.toLocaleString('en-IN')}` : '—'}
-                      </td>
-                      <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => onSelectDay(day.date)}
-                            className="px-2.5 py-1 rounded-lg border border-plaza-line hover:border-plaza-accent hover:text-plaza-accent text-[11px] font-medium transition"
-                          >
-                            Open
-                          </button>
-                          {day.hasData && (
-                            <button
-                              onClick={(e) => handleDownloadDayPDF(day.date, e)}
-                              className="p-1 rounded-lg text-plaza-text-3 hover:text-plaza-accent transition"
-                              title="Download Daily PDF"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                    <div key={plat} className="bg-plaza-card rounded-2xl p-4 border border-plaza-line/40">
+                      <span className="text-[10px] font-semibold tracking-wider uppercase text-plaza-accent">
+                        Total Online ({plat})
+                      </span>
+                      <div className="text-xl lg:text-2xl font-bold text-plaza-accent tracking-tight mt-1.5">
+                        ₹{tot.toLocaleString('en-IN')}
+                      </div>
+                      <div className="text-[11px] text-plaza-text-3 mt-1">
+                        Bookings via {plat}
+                      </div>
+                    </div>
                   );
                 })}
 
-                {/* GRAND TOTAL ROW EXACTLY AS IN REGISTER */}
-                <tr className="bg-plaza-accent-tint font-bold text-plaza-text border-t-2 border-t-plaza-text">
-                  <td colSpan={2} className="p-3 text-center uppercase tracking-wider text-xs">
-                    GRAND TOTAL
-                  </td>
-                  <td className="p-3 text-right">
-                    {summary.totalAdvance > 0 ? `₹${summary.totalAdvance.toLocaleString('en-IN')}` : '—'}
-                  </td>
-                  <td className="p-3 text-right">
-                    {summary.totalCash > 0 ? `₹${summary.totalCash.toLocaleString('en-IN')}` : '—'}
-                  </td>
-                  {(summary.activePlatforms || ['Agoda']).map((plat) => {
-                    const tot = summary.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? summary.totalAgoda : 0);
-                    return (
-                      <td key={plat} className="p-3 text-right text-plaza-accent font-bold">
-                        {tot > 0 ? `₹${tot.toLocaleString('en-IN')}` : '—'}
-                      </td>
-                    );
-                  })}
-                  <td className="p-3 text-right">
-                    {summary.totalOtherOnline > 0 ? `₹${summary.totalOtherOnline.toLocaleString('en-IN')}` : '—'}
-                  </td>
-                  <td className="p-3 text-right text-sm font-bold text-plaza-text">
-                    ₹{summary.totalRevenue.toLocaleString('en-IN')}
-                  </td>
-                  <td className="p-3 text-center">
-                    <button
-                      onClick={() => generateMonthlyPDF(summary)}
-                      className="px-2.5 py-1 rounded-lg bg-plaza-accent text-white text-[11px] font-medium shadow-2xs"
-                    >
-                      PDF
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                <div className="bg-plaza-card rounded-2xl p-4 border border-plaza-line/40">
+                  <span className="text-[10px] font-semibold tracking-wider uppercase text-plaza-text-3">
+                    Total Online (Others)
+                  </span>
+                  <div className="text-xl lg:text-2xl font-bold text-plaza-text tracking-tight mt-1.5">
+                    ₹{summary.totalOtherOnline.toLocaleString('en-IN')}
+                  </div>
+                  <div className="text-[11px] text-plaza-text-3 mt-1">
+                    Direct digital payments
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Main Content: Exact Table Format from Image 1 - Horizontal Landscape */}
+            {activeTab === 'table' && summary && (
+              <div className="bg-white rounded-2xl border border-plaza-line shadow-card overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse min-w-[950px]">
+                    <thead>
+                      <tr className="bg-plaza-card border-b border-plaza-line text-[10px] uppercase font-bold text-plaza-text">
+                        <th className="p-3 text-center w-14">SR. NO.</th>
+                        <th className="p-3 text-center w-24">DATE</th>
+                        <th className="p-3 text-right">ADVANCE</th>
+                        <th className="p-3 text-right">CASH</th>
+                        {displayPlatforms.map((plat) => (
+                          <th key={plat} className="p-3 text-right text-plaza-accent whitespace-nowrap">
+                            ONLINE ({plat.toUpperCase()})
+                          </th>
+                        ))}
+                        <th className="p-3 text-right whitespace-nowrap">ONLINE (OTHERS)</th>
+                        <th className="p-3 text-right font-bold text-plaza-text whitespace-nowrap">(DAY TOTAL)</th>
+                        <th className="p-3 text-center w-20">ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-plaza-line/50">
+                      {summary.days.map((day) => {
+                        return (
+                          <tr
+                            key={day.date}
+                            onClick={() => onSelectDay(day.date)}
+                            className="hover:bg-plaza-accent-tint/30 cursor-pointer transition-colors"
+                          >
+                            <td className="p-3 text-center font-mono font-medium text-plaza-text-3">
+                              {day.dayNumber}
+                            </td>
+                            <td className="p-3 text-center font-mono font-semibold text-plaza-text">
+                              {day.formattedDate}
+                            </td>
+                            <td className="p-3 text-right text-plaza-text-2">
+                              {day.advanceTotal > 0 ? `₹${day.advanceTotal.toLocaleString('en-IN')}` : '—'}
+                            </td>
+                            <td className="p-3 text-right text-plaza-text-2">
+                              {day.tBusinessCash > 0 ? `₹${day.tBusinessCash.toLocaleString('en-IN')}` : '—'}
+                            </td>
+                            {displayPlatforms.map((plat) => {
+                              const amt = day.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? day.agodaOnline : 0);
+                              return (
+                                <td key={plat} className="p-3 text-right font-semibold text-plaza-accent">
+                                  {amt > 0 ? `₹${amt.toLocaleString('en-IN')}` : '—'}
+                                </td>
+                              );
+                            })}
+                            <td className="p-3 text-right text-plaza-text-2">
+                              {day.otherOnline > 0 ? `₹${day.otherOnline.toLocaleString('en-IN')}` : '—'}
+                            </td>
+                            <td className="p-3 text-right font-bold text-plaza-text">
+                              {day.dayTotal > 0 ? `₹${day.dayTotal.toLocaleString('en-IN')}` : '—'}
+                            </td>
+                            <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => onSelectDay(day.date)}
+                                  className="px-2.5 py-1 rounded-lg border border-plaza-line hover:border-plaza-accent hover:text-plaza-accent text-[11px] font-medium transition"
+                                >
+                                  Open
+                                </button>
+                                {day.hasData && (
+                                  <button
+                                    onClick={(e) => handleDownloadDayPDF(day.date, e)}
+                                    className="p-1 rounded-lg text-plaza-text-3 hover:text-plaza-accent transition"
+                                    title="Download Daily PDF"
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                      {/* GRAND TOTAL ROW EXACTLY AS IN REGISTER */}
+                      <tr className="bg-plaza-accent-tint font-bold text-plaza-text border-t-2 border-t-plaza-text">
+                        <td colSpan={2} className="p-3 text-center uppercase tracking-wider text-xs">
+                          GRAND TOTAL
+                        </td>
+                        <td className="p-3 text-right">
+                          {summary.totalAdvance > 0 ? `₹${summary.totalAdvance.toLocaleString('en-IN')}` : '—'}
+                        </td>
+                        <td className="p-3 text-right">
+                          {summary.totalCash > 0 ? `₹${summary.totalCash.toLocaleString('en-IN')}` : '—'}
+                        </td>
+                        {displayPlatforms.map((plat) => {
+                          const tot = summary.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? summary.totalAgoda : 0);
+                          return (
+                            <td key={plat} className="p-3 text-right text-plaza-accent font-bold">
+                              {tot > 0 ? `₹${tot.toLocaleString('en-IN')}` : '—'}
+                            </td>
+                          );
+                        })}
+                        <td className="p-3 text-right">
+                          {summary.totalOtherOnline > 0 ? `₹${summary.totalOtherOnline.toLocaleString('en-IN')}` : '—'}
+                        </td>
+                        <td className="p-3 text-right text-sm font-bold text-plaza-text">
+                          ₹{summary.totalRevenue.toLocaleString('en-IN')}
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            onClick={() => generateMonthlyPDF(summary)}
+                            className="px-2.5 py-1 rounded-lg bg-plaza-accent text-white text-[11px] font-medium shadow-2xs"
+                          >
+                            PDF
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Main Content: Calendar Grid View */}
       {activeTab === 'grid' && summary && (

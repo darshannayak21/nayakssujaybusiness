@@ -70,11 +70,68 @@ export function createEmptyRoomEntry(def: RoomDefinition): RoomEntry {
     primaryStayDate: '',
     stayPaidOnCheckIn: 0,
     stayBalanceRemaining: 0,
+    isExtraEntry: false,
+    extraEntryIndex: 1,
   };
 }
 
 export function createInitialRooms(): RoomEntry[] {
   return ROOM_DEFINITIONS.map(createEmptyRoomEntry);
+}
+
+/**
+ * Normalizes day sheet rooms so all 26 base rooms exist in canonical order,
+ * with any extra entries (e.g. room booked twice in a day) neatly preserved directly
+ * beneath their parent room.
+ */
+export function normalizeDaySheetRooms(parsedRooms: any[]): RoomEntry[] {
+  if (!Array.isArray(parsedRooms) || parsedRooms.length === 0) {
+    return createInitialRooms();
+  }
+
+  // 1. Group parsed rooms by roomNumber
+  const roomsByNumber = new Map<string, any[]>();
+  parsedRooms.forEach(r => {
+    if (!r || !r.roomNumber) return;
+    const list = roomsByNumber.get(r.roomNumber) || [];
+    list.push(r);
+    roomsByNumber.set(r.roomNumber, list);
+  });
+
+  // 2. Iterate through canonical ROOM_DEFINITIONS (101 to 303)
+  const result: RoomEntry[] = [];
+  ROOM_DEFINITIONS.forEach(def => {
+    const existingList = roomsByNumber.get(def.roomNumber);
+    if (!existingList || existingList.length === 0) {
+      result.push(createEmptyRoomEntry(def));
+    } else {
+      // First entry is the base entry (isExtraEntry: false)
+      const base: RoomEntry = {
+        ...createEmptyRoomEntry(def),
+        ...existingList[0],
+        floor: def.floor,
+        slNo: def.slNo,
+        isExtraEntry: false,
+        extraEntryIndex: 1,
+      };
+      result.push(base);
+
+      // Any subsequent entries are extra entries for this room
+      for (let i = 1; i < existingList.length; i++) {
+        const extra: RoomEntry = {
+          ...createEmptyRoomEntry(def),
+          ...existingList[i],
+          floor: def.floor,
+          slNo: def.slNo,
+          isExtraEntry: true,
+          extraEntryIndex: i + 1,
+        };
+        result.push(extra);
+      }
+    }
+  });
+
+  return result;
 }
 
 export function calculateRoomTotal(room: RoomEntry): number | '' {
@@ -215,7 +272,13 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
   // Day total: Advance + Cash + sum(all online platforms) + Other Online
   const dayTotal = advanceTotal + tBusinessCash + platformsOnlineSum + tBusinessOtherOnline;
 
-  const vacantRooms = ROOM_DEFINITIONS.length - occupiedRooms - checkedOutRooms;
+  // Distinct physical rooms occupied or checked out
+  const occupiedRoomNumbers = new Set(
+    rooms
+      .filter(r => r.status === 'occupied' || r.status === 'checkout')
+      .map(r => r.roomNumber)
+  );
+  const vacantRooms = Math.max(0, ROOM_DEFINITIONS.filter(def => !occupiedRoomNumbers.has(def.roomNumber)).length);
 
   return {
     roomRent,
@@ -238,7 +301,7 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
     netOnline,
     totalCollections,
     occupiedRooms,
-    vacantRooms: Math.max(0, vacantRooms),
+    vacantRooms,
     checkedOutRooms,
     agodaBookingsCount,
   };
