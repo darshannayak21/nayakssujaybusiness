@@ -14,6 +14,7 @@ export interface RoomEntry {
   tBusinessCash: number | '';
   tBusinessOnline: number | '';
   cashUpdatedAt?: string;        // Timestamp when cash was recorded/updated
+  bookingUpdatedAt?: string;     // Timestamp when booking details were created/updated
   gst5: number | '';
   gstAuto: boolean;
   balance: number | '';

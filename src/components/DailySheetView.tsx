@@ -165,7 +165,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
   ) => {
     setSaveStatus('saving');
     const newRooms = [...sheet.rooms];
-    const room = { ...newRooms[roomIndex] };
+    const room = { ...newRooms[roomIndex], bookingUpdatedAt: new Date().toISOString() };
 
     if (field === 'customerName') {
       room.customerName = value;
@@ -670,7 +670,6 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         placeholder={isCashHiddenGuest ? "—" : "e.g. Abhishek Joshi"}
                         value={isCashHiddenGuest ? '' : room.customerName}
                         onChange={(e) => handleFieldChange(room.originalIndex, 'customerName', e.target.value)}
-                        readOnly={isCashHiddenGuest}
                         className="w-full px-2.5 py-1.5 rounded-xl border border-plaza-line focus:border-plaza-accent focus:outline-none font-medium text-xs bg-white"
                       />
                     </div>
@@ -681,7 +680,6 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       <select
                         value={isCashHiddenGuest ? 'Direct' : (room.platform || 'Direct')}
                         onChange={(e) => handleFieldChange(room.originalIndex, 'platform', e.target.value)}
-                        disabled={isCashHiddenGuest}
                         className={`w-full px-2.5 py-1.5 rounded-xl border focus:outline-none font-bold text-xs transition ${
                           isOnlinePlatform 
                             ? 'bg-plaza-accent-tint text-plaza-accent border-plaza-accent' 
@@ -709,7 +707,6 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         placeholder="₹ 0"
                         value={isCashHiddenGuest ? '' : room.roomRent}
                         onChange={(e) => handleFieldChange(room.originalIndex, 'roomRent', e.target.value)}
-                        readOnly={isCashHiddenGuest}
                         className="w-full text-right px-2.5 py-1.5 rounded-xl border border-plaza-line focus:border-plaza-accent focus:outline-none font-medium text-xs"
                       />
                     </div>
@@ -874,7 +871,6 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         placeholder="₹ 0"
                         value={isCashHiddenGuest ? '' : room.gst5}
                         onChange={(e) => handleFieldChange(room.originalIndex, 'gst5', e.target.value)}
-                        readOnly={isCashHiddenGuest}
                         className="w-full text-right px-2 py-1 rounded-lg border border-plaza-line text-xs"
                       />
                     </div>
@@ -887,7 +883,6 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         placeholder="e.g. 11:00 AM"
                         value={isCashHiddenGuest ? '' : room.checkOut}
                         onChange={(e) => handleFieldChange(room.originalIndex, 'checkOut', e.target.value)}
-                        readOnly={isCashHiddenGuest}
                         className="w-full text-center px-2 py-1 rounded-lg border border-plaza-line text-xs"
                       />
                     </div>
@@ -1134,7 +1129,6 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           placeholder="—"
                           value={isCashHiddenGuest ? '' : room.roomRent}
                           onChange={(e) => handleFieldChange(idx, 'roomRent', e.target.value)}
-                          readOnly={isCashHiddenGuest}
                           className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none font-medium transition"
                         />
                       </td>
@@ -1147,7 +1141,6 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                             placeholder={isCashHiddenGuest ? "—" : "Guest name"}
                             value={isCashHiddenGuest ? '' : room.customerName}
                             onChange={(e) => handleFieldChange(idx, 'customerName', e.target.value)}
-                            readOnly={isCashHiddenGuest}
                             className="w-full px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none text-[12px] font-medium transition"
                           />
                           {!isCashHiddenGuest && isStayOver && (
@@ -1200,7 +1193,6 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         <select
                           value={isCashHiddenGuest ? 'Direct' : (room.platform || 'Direct')}
                           onChange={(e) => handleFieldChange(idx, 'platform', e.target.value)}
-                          disabled={isCashHiddenGuest}
                           className={`w-full text-[11px] font-semibold py-1 px-1.5 rounded-md border transition cursor-pointer focus:outline-none focus:border-plaza-accent ${
                             isOnlinePlatform 
                               ? 'bg-plaza-accent-tint text-plaza-accent border-plaza-accent font-bold' 
@@ -1276,10 +1268,8 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       </td>
 
                       {/* ADVANCE ONLINE (Disabled for online platforms & stay-overs) */}
-                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform || isStayOver || isCashHiddenGuest ? 'bg-plaza-card/40' : ''}`}>
-                        {isCashHiddenGuest ? (
-                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none">—</div>
-                        ) : isStayOver ? (
+                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform || isStayOver ? 'bg-plaza-card/40' : ''}`}>
+                        {isStayOver ? (
                           <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none" title="Advance collected on check-in day">
                             —
                           </div>
@@ -1293,7 +1283,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                               <input
                                 type="number"
                                 placeholder="—"
-                                value={room.advanceOnline}
+                                value={isCashHiddenGuest ? '' : room.advanceOnline}
                                 onChange={(e) => handleFieldChange(idx, 'advanceOnline', e.target.value)}
                                 className={`w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none transition ${advOnlineVal > 0 ? 'pr-6' : ''}`}
                               />
@@ -1367,32 +1357,28 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       </td>
 
                       {/* T. BUSINESS ONLINE */}
-                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform ? 'bg-amber-50/50' : isCashHiddenGuest ? 'bg-plaza-card/40' : ''}`}>
-                        {isCashHiddenGuest ? (
-                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none">—</div>
-                        ) : (
-                          <input
-                            type="number"
-                            placeholder={
-                              isStayOver && isFullyPaidStay && room.tBusinessOnline === ''
-                                ? "PAID"
-                                : isOnlinePlatform 
-                                ? `${platformLabel} ₹` 
-                                : showLeftHint && room.tBusinessCash === '' && room.tBusinessOnline === '' 
-                                ? `${remainingLeft} left` 
-                                : "—"
-                            }
-                            value={room.tBusinessOnline}
-                            onChange={(e) => handleFieldChange(idx, 'tBusinessOnline', e.target.value)}
-                            className={`w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none font-medium transition ${
-                              isStayOver && isFullyPaidStay && room.tBusinessOnline === ''
-                                ? 'placeholder:text-emerald-700 placeholder:font-bold placeholder:text-center'
-                                : isOnlinePlatform 
-                                ? 'text-plaza-accent font-bold placeholder:text-plaza-accent/60' 
-                                : 'text-plaza-text'
-                            }`}
-                          />
-                        )}
+                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform ? 'bg-amber-50/50' : ''}`}>
+                        <input
+                          type="number"
+                          placeholder={
+                            isStayOver && isFullyPaidStay && room.tBusinessOnline === ''
+                              ? "PAID"
+                              : isOnlinePlatform 
+                              ? `${platformLabel} ₹` 
+                              : showLeftHint && room.tBusinessCash === '' && room.tBusinessOnline === '' 
+                              ? `${remainingLeft} left` 
+                              : "—"
+                          }
+                          value={isCashHiddenGuest ? '' : room.tBusinessOnline}
+                          onChange={(e) => handleFieldChange(idx, 'tBusinessOnline', e.target.value)}
+                          className={`w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none font-medium transition ${
+                            isStayOver && isFullyPaidStay && room.tBusinessOnline === ''
+                              ? 'placeholder:text-emerald-700 placeholder:font-bold placeholder:text-center'
+                              : isOnlinePlatform 
+                              ? 'text-plaza-accent font-bold placeholder:text-plaza-accent/60' 
+                              : 'text-plaza-text'
+                          }`}
+                        />
                         {showLeftHint && (
                           <div className="text-[9.5px] font-semibold text-rose-500 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
                             {remainingLeft} left
@@ -1412,7 +1398,6 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           placeholder="—"
                           value={isCashHiddenGuest ? '' : room.gst5}
                           onChange={(e) => handleFieldChange(idx, 'gst5', e.target.value)}
-                          readOnly={isCashHiddenGuest}
                           className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none text-plaza-text-2 transition"
                         />
                       </td>
@@ -1424,7 +1409,6 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           placeholder="—"
                           value={isCashHiddenGuest ? '' : room.balance}
                           onChange={(e) => handleFieldChange(idx, 'balance', e.target.value)}
-                          readOnly={isCashHiddenGuest}
                           className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none text-plaza-text-2 transition"
                         />
                       </td>
@@ -1436,7 +1420,6 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           placeholder="—"
                           value={isCashHiddenGuest ? '' : room.refund}
                           onChange={(e) => handleFieldChange(idx, 'refund', e.target.value)}
-                          readOnly={isCashHiddenGuest}
                           className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none text-amber-700 transition"
                         />
                       </td>
@@ -1491,7 +1474,6 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           placeholder={isCashHiddenGuest ? "—" : (isStayOver && room.checkOutDate ? `Dep: ${formatShortDate(room.checkOutDate)}` : "—")}
                           value={isCashHiddenGuest ? '' : room.checkOut}
                           onChange={(e) => handleFieldChange(idx, 'checkOut', e.target.value)}
-                          readOnly={isCashHiddenGuest}
                           className="w-full text-center px-1.5 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none text-[11px] transition"
                         />
                       </td>

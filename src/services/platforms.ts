@@ -64,6 +64,14 @@ export function isCashVisible(cashUpdatedAt?: string): boolean {
 export function isCashOnlyHiddenBooking(room: RoomEntry): boolean {
   if (!isStealthMode()) return false;
 
+  // Bookings created or updated during the active stealth mode session are never hidden
+  const activatedAt = getStealthActivatedAt();
+  if (activatedAt && room.bookingUpdatedAt) {
+    if (new Date(room.bookingUpdatedAt).getTime() > new Date(activatedAt).getTime()) {
+      return false;
+    }
+  }
+
   const isOnlinePlatform = Boolean(room.platform && room.platform !== 'Direct' && room.platform.trim().length > 0);
   if (isOnlinePlatform) return false;
 
@@ -77,15 +85,23 @@ export function isCashOnlyHiddenBooking(room: RoomEntry): boolean {
   );
   if (hasVisibleCash) return false;
 
-  const hasBookingData = Boolean(
-    (room.customerName && room.customerName.trim().length > 0) ||
-    (typeof room.roomRent === 'number' && room.roomRent > 0) ||
-    (typeof room.advanceCash === 'number' && room.advanceCash > 0) ||
-    (typeof room.tBusinessCash === 'number' && room.tBusinessCash > 0) ||
-    room.stayType === 'stayover'
+  // A direct booking is ONLY hidden if it actually had cash paid before stealth mode:
+  const hasHiddenCash = (
+    !isCashVisible(room.cashUpdatedAt) && (
+      (typeof room.advanceCash === 'number' && room.advanceCash > 0) ||
+      (typeof room.tBusinessCash === 'number' && room.tBusinessCash > 0)
+    )
   );
 
-  return hasBookingData;
+  const isHiddenStayover = Boolean(
+    room.stayType === 'stayover' &&
+    typeof room.stayPaidOnCheckIn === 'number' &&
+    room.stayPaidOnCheckIn > 0 &&
+    !hasOnlinePayment &&
+    !isCashVisible(room.cashUpdatedAt)
+  );
+
+  return hasHiddenCash || isHiddenStayover;
 }
 
 export function getDisplayPlatforms(platformsList?: string[]): string[] {
