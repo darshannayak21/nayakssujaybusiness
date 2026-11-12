@@ -19,7 +19,7 @@ import { DaySheet, RoomEntry } from '../types';
 import { calculateRoomTotal, computeSheetTotals, createEmptyRoomEntry, ROOM_DEFINITIONS } from '../data/rooms';
 import { formatDateForDisplay } from '../services/db';
 import { generateDailyPDF } from '../services/pdfGenerator';
-import { getBookingPlatforms } from '../services/platforms';
+import { getBookingPlatforms, isStealthMode, isCashVisible, getDisplayPlatforms } from '../services/platforms';
 import { StayDatesModal } from './StayDatesModal';
 
 interface DailySheetViewProps {
@@ -39,11 +39,24 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
   const [platforms, setPlatforms] = useState<string[]>(getBookingPlatforms());
   const [stayModalRoomIndex, setStayModalRoomIndex] = useState<number | null>(null);
 
+  const stealth = isStealthMode(platforms);
+  const displayPlatforms = getDisplayPlatforms(platforms);
+
   useEffect(() => {
-    const handler = () => setPlatforms(getBookingPlatforms());
+    const handler = () => {
+      const updatedPlats = getBookingPlatforms();
+      setPlatforms(updatedPlats);
+      // Recompute totals in case stealth mode toggled
+      const newTotals = computeSheetTotals(sheet.rooms);
+      onUpdateSheet({
+        ...sheet,
+        totals: newTotals,
+        updatedAt: new Date().toISOString()
+      });
+    };
     window.addEventListener('plaza_platforms_updated', handler);
     return () => window.removeEventListener('plaza_platforms_updated', handler);
-  }, []);
+  }, [sheet]);
 
   const { dayStr, monthStr, yearStr } = formatDateForDisplay(sheet.date);
 
@@ -197,11 +210,15 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
       }
 
       if (field === 'advanceCash') {
+        room.cashUpdatedAt = new Date().toISOString();
         if (typeof numVal === 'number' && numVal > 0 && !room.advanceCashDate) {
           room.advanceCashDate = sheet.date;
         } else if (value === '') {
           room.advanceCashDate = '';
         }
+      }
+      if (field === 'tBusinessCash') {
+        room.cashUpdatedAt = new Date().toISOString();
       }
       if (field === 'advanceOnline') {
         if (typeof numVal === 'number' && numVal > 0 && !room.advanceOnlineDate) {
@@ -401,7 +418,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
             ₹{sheet.totals.dayTotal.toLocaleString('en-IN')}
           </div>
           <div className="text-[10px] text-plaza-text-3 mt-0.5 truncate">
-            Adv + Cash + Agoda + Others
+            {stealth ? 'Adv + Agoda + Others' : 'Adv + Cash + Agoda + Others'}
           </div>
         </div>
 
@@ -513,9 +530,10 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
             const platformLabel = isOnlinePlatform ? room.platform : '';
 
             const cardRentVal = typeof room.roomRent === 'number' ? room.roomRent : 0;
-            const cardAdvCash = typeof room.advanceCash === 'number' ? room.advanceCash : 0;
+            const cardAdvCashVis = isCashVisible(room.cashUpdatedAt);
+            const cardAdvCash = (cardAdvCashVis && typeof room.advanceCash === 'number') ? room.advanceCash : 0;
             const cardAdvOnline = typeof room.advanceOnline === 'number' ? room.advanceOnline : 0;
-            const cardTBCash = typeof room.tBusinessCash === 'number' ? room.tBusinessCash : 0;
+            const cardTBCash = (cardAdvCashVis && typeof room.tBusinessCash === 'number') ? room.tBusinessCash : 0;
             const cardTBOnline = typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : 0;
             const cardTotalAdv = cardAdvCash + cardAdvOnline;
             const cardTotalTB = cardTBCash + cardTBOnline;
@@ -666,7 +684,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         }`}
                       >
                         <option value="Direct">Direct / Walk-in</option>
-                        {platforms.map(p => (
+                        {displayPlatforms.map(p => (
                           <option key={p} value={p}>{p}</option>
                         ))}
                         {room.platform && room.platform !== 'Direct' && !platforms.some(p => p.toLowerCase() === room.platform.toLowerCase()) && (
@@ -734,26 +752,30 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="relative flex items-center">
-                          <input
-                            type="number"
-                            placeholder="₹ 0"
-                            value={room.advanceCash}
-                            onChange={(e) => handleFieldChange(room.originalIndex, 'advanceCash', e.target.value)}
-                            className={`w-full text-right px-2 py-1 rounded-lg border border-plaza-line text-xs ${cardAdvCash > 0 ? 'pr-5' : ''}`}
-                          />
-                          {cardAdvCash > 0 && (
-                            <div className="absolute right-1 flex items-center" title="Choose advance date">
-                              <CalendarIcon className="w-3 h-3 text-amber-500 hover:text-amber-600 pointer-events-none" />
-                              <input
-                                type="date"
-                                value={room.advanceCashDate || sheet.date}
-                                onChange={(e) => handleFieldChange(room.originalIndex, 'advanceCashDate', e.target.value)}
-                                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                              />
-                            </div>
-                          )}
-                        </div>
+                        {!cardAdvCashVis && room.advanceCash !== '' ? (
+                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none">—</div>
+                        ) : (
+                          <div className="relative flex items-center">
+                            <input
+                              type="number"
+                              placeholder="₹ 0"
+                              value={room.advanceCash}
+                              onChange={(e) => handleFieldChange(room.originalIndex, 'advanceCash', e.target.value)}
+                              className={`w-full text-right px-2 py-1 rounded-lg border border-plaza-line text-xs ${cardAdvCash > 0 ? 'pr-5' : ''}`}
+                            />
+                            {cardAdvCash > 0 && (
+                              <div className="absolute right-1 flex items-center" title="Choose advance date">
+                                <CalendarIcon className="w-3 h-3 text-amber-500 hover:text-amber-600 pointer-events-none" />
+                                <input
+                                  type="date"
+                                  value={room.advanceCashDate || sheet.date}
+                                  onChange={(e) => handleFieldChange(room.originalIndex, 'advanceCashDate', e.target.value)}
+                                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {cardShowHint && cardAdvCash > 0 && (
                           <div className="text-[9px] font-semibold text-rose-500 text-right mt-0.5">
                             {cardRemaining} left
@@ -811,13 +833,17 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         <label className="text-[9px] uppercase font-bold text-plaza-text-3 block mb-0.5">
                           TB Cash
                         </label>
-                        <input
-                          type="number"
-                          placeholder={cardShowHint && room.tBusinessCash === '' && room.tBusinessOnline === '' ? `${cardRemaining} left` : "₹ 0"}
-                          value={room.tBusinessCash}
-                          onChange={(e) => handleFieldChange(room.originalIndex, 'tBusinessCash', e.target.value)}
-                          className="w-full text-right px-2 py-1 rounded-lg border border-plaza-line text-xs"
-                        />
+                        {!cardAdvCashVis && room.tBusinessCash !== '' ? (
+                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none">—</div>
+                        ) : (
+                          <input
+                            type="number"
+                            placeholder={cardShowHint && room.tBusinessCash === '' && room.tBusinessOnline === '' ? `${cardRemaining} left` : "₹ 0"}
+                            value={room.tBusinessCash}
+                            onChange={(e) => handleFieldChange(room.originalIndex, 'tBusinessCash', e.target.value)}
+                            className="w-full text-right px-2 py-1 rounded-lg border border-plaza-line text-xs"
+                          />
+                        )}
                         {cardShowHint && (
                           <div className="text-[9.5px] font-semibold text-rose-500 text-right mt-0.5">
                             {cardRemaining} left
@@ -1010,9 +1036,10 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                   const platformLabel = isOnlinePlatform ? room.platform : '';
 
                   const rentVal = typeof room.roomRent === 'number' ? room.roomRent : 0;
-                  const advCashVal = typeof room.advanceCash === 'number' ? room.advanceCash : 0;
+                  const cashVis = isCashVisible(room.cashUpdatedAt);
+                  const advCashVal = (cashVis && typeof room.advanceCash === 'number') ? room.advanceCash : 0;
                   const advOnlineVal = typeof room.advanceOnline === 'number' ? room.advanceOnline : 0;
-                  const tbCashVal = typeof room.tBusinessCash === 'number' ? room.tBusinessCash : 0;
+                  const tbCashVal = (cashVis && typeof room.tBusinessCash === 'number') ? room.tBusinessCash : 0;
                   const tbOnlineVal = typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : 0;
 
                   const isStayOver = room.stayType === 'stayover';
@@ -1167,7 +1194,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                           }`}
                         >
                           <option value="Direct">Direct</option>
-                          {platforms.map((p) => (
+                          {displayPlatforms.map((p) => (
                             <option key={p} value={p}>{p}</option>
                           ))}
                           {room.platform && room.platform !== 'Direct' && !platforms.some(p => p.toLowerCase() === room.platform.toLowerCase()) && (
@@ -1177,13 +1204,17 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       </td>
 
                       {/* ADVANCE CASH (Disabled for online platforms & stay-overs) */}
-                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform || isStayOver ? 'bg-plaza-card/40' : ''}`}>
+                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform || isStayOver || (!cashVis && room.advanceCash !== '') ? 'bg-plaza-card/40' : ''}`}>
                         {isStayOver ? (
                           <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none" title="Advance collected on check-in day">
                             —
                           </div>
                         ) : isOnlinePlatform ? (
                           <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none" title={`${platformLabel} bookings have no advance`}>
+                            —
+                          </div>
+                        ) : (!cashVis && room.advanceCash !== '') ? (
+                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none">
                             —
                           </div>
                         ) : (
@@ -1281,24 +1312,30 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       </td>
 
                       {/* T. BUSINESS CASH */}
-                      <td className="border-r border-plaza-line p-1">
-                        <input
-                          type="number"
-                          placeholder={
-                            isStayOver && isFullyPaidStay && room.tBusinessCash === ''
-                              ? "PAID"
-                              : showLeftHint && room.tBusinessCash === '' && room.tBusinessOnline === '' 
-                              ? `${remainingLeft} left` 
-                              : "—"
-                          }
-                          value={room.tBusinessCash}
-                          onChange={(e) => handleFieldChange(idx, 'tBusinessCash', e.target.value)}
-                          className={`w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none font-medium transition ${
-                            isStayOver && isFullyPaidStay && room.tBusinessCash === ''
-                              ? 'placeholder:text-emerald-700 placeholder:font-bold placeholder:text-center'
-                              : 'text-plaza-text'
-                          }`}
-                        />
+                      <td className={`border-r border-plaza-line p-1 ${!cashVis && room.tBusinessCash !== '' ? 'bg-plaza-card/40' : ''}`}>
+                        {!cashVis && room.tBusinessCash !== '' ? (
+                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none">
+                            —
+                          </div>
+                        ) : (
+                          <input
+                            type="number"
+                            placeholder={
+                              isStayOver && isFullyPaidStay && room.tBusinessCash === ''
+                                ? "PAID"
+                                : showLeftHint && room.tBusinessCash === '' && room.tBusinessOnline === '' 
+                                ? `${remainingLeft} left` 
+                                : "—"
+                            }
+                            value={room.tBusinessCash}
+                            onChange={(e) => handleFieldChange(idx, 'tBusinessCash', e.target.value)}
+                            className={`w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none font-medium transition ${
+                              isStayOver && isFullyPaidStay && room.tBusinessCash === ''
+                                ? 'placeholder:text-emerald-700 placeholder:font-bold placeholder:text-center'
+                                : 'text-plaza-text'
+                            }`}
+                          />
+                        )}
                         {showLeftHint && (
                           <div className="text-[9.5px] font-semibold text-rose-500 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
                             {remainingLeft} left
@@ -1492,7 +1529,9 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
               </div>
               <div>
                 <span className="text-plaza-text-3">Cash: </span>
-                <span className="font-bold text-plaza-text">₹{sheet.totals.tBusinessCash.toLocaleString('en-IN')}</span>
+                <span className="font-bold text-plaza-text">
+                  {sheet.totals.tBusinessCash > 0 ? `₹${sheet.totals.tBusinessCash.toLocaleString('en-IN')}` : '—'}
+                </span>
               </div>
               <div>
                 <span className="text-plaza-text-3">Online (Agoda): </span>

@@ -13,6 +13,7 @@ export interface RoomEntry {
   advanceDate?: string;          // Generic fallback advance date
   tBusinessCash: number | '';
   tBusinessOnline: number | '';
+  cashUpdatedAt?: string;        // Timestamp when cash was recorded/updated
   gst5: number | '';
   gstAuto: boolean;
   balance: number | '';

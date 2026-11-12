@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { MonthSummary, YearSummary, MonthPerformance, MonthSummaryDay } from '../types';
 import { getMonthSummary, getYearSummary } from '../services/db';
-import { getBookingPlatforms } from '../services/platforms';
+import { getBookingPlatforms, isStealthMode } from '../services/platforms';
 
 interface MonthAnalyticsViewProps {
   initialYear?: number;
@@ -173,11 +173,13 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
   // Active online platforms across the month/year
   // Configured platforms always show (even with 0 sales); removed platforms show ONLY if they had sales > 0
   const configured = getBookingPlatforms();
+  const stealth = isStealthMode(configured);
   const rawPlatforms = analyticsScope === 'daily' 
     ? (summary?.activePlatforms || configured)
     : (yearSummary?.activePlatforms || configured);
 
   const activePlatforms = rawPlatforms.filter(plat => {
+    if (plat.trim().toLowerCase() === 'bookings') return false;
     if (configured.some(cp => cp.toLowerCase() === plat.toLowerCase())) return true;
     const amt = analyticsScope === 'daily'
       ? (summary?.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? summary?.totalAgoda || 0 : 0) || 0)
@@ -198,7 +200,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
     ? Math.round((totalPlatformsRevenue / summary.totalRevenue) * 100) 
     : 0;
 
-  const cashPercentage = summary && summary.totalRevenue > 0 
+  const cashPercentage = (!stealth && summary && summary.totalRevenue > 0) 
     ? Math.round((summary.totalCash / summary.totalRevenue) * 100) 
     : 0;
 
@@ -464,7 +466,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
                           </div>
                           <div className="text-amber-400 font-bold">Total: ₹{day.dayTotal.toLocaleString('en-IN')}</div>
                           {day.advanceTotal > 0 && <div className="text-sky-300">Advance: ₹{day.advanceTotal.toLocaleString('en-IN')}</div>}
-                          {day.tBusinessCash > 0 && <div className="text-emerald-300">Cash: ₹{day.tBusinessCash.toLocaleString('en-IN')}</div>}
+                          {!stealth && day.tBusinessCash > 0 && <div className="text-emerald-300">Cash: ₹{day.tBusinessCash.toLocaleString('en-IN')}</div>}
                           {Object.entries(day.platformTotals || {}).filter(([_, v]) => (v as number) > 0).map(([k, v]) => (
                             <div key={k} className="text-orange-300">{k}: ₹{(v as number).toLocaleString('en-IN')}</div>
                           ))}
@@ -538,7 +540,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
                       Cash Collections
                     </span>
                     <span className="text-plaza-text">
-                      ₹{summary?.totalCash.toLocaleString('en-IN')} ({cashPercentage}%)
+                      ₹{stealth ? '0' : summary?.totalCash.toLocaleString('en-IN')} ({cashPercentage}%)
                     </span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-plaza-card overflow-hidden">
@@ -707,7 +709,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
                             {d.advanceTotal > 0 ? `₹${d.advanceTotal.toLocaleString('en-IN')}` : '—'}
                           </td>
                           <td className="p-3 text-right text-plaza-text-2">
-                            {d.tBusinessCash > 0 ? `₹${d.tBusinessCash.toLocaleString('en-IN')}` : '—'}
+                            {!stealth && d.tBusinessCash > 0 ? `₹${d.tBusinessCash.toLocaleString('en-IN')}` : '—'}
                           </td>
                           {activePlatforms.map(plat => {
                             const pAmt = d.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? d.agodaOnline : 0) || 0;
@@ -791,19 +793,19 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
                 </div>
               </div>
               <div className="text-sm font-bold text-plaza-text flex items-center justify-between mt-1">
-                <span className="text-plaza-text">Cash: ₹{yearSummary ? (yearSummary.totalCash + yearSummary.totalAdvance).toLocaleString('en-IN') : 0}</span>
+                <span className="text-plaza-text">Cash: ₹{stealth ? 0 : (yearSummary ? (yearSummary.totalCash + yearSummary.totalAdvance).toLocaleString('en-IN') : 0)}</span>
                 <span className="text-plaza-accent">Online: ₹{yearSummary ? yearSummary.totalOnline.toLocaleString('en-IN') : 0}</span>
               </div>
               <div className="w-full h-2 rounded-full bg-plaza-card overflow-hidden mt-2.5 flex">
                 <div 
                   style={{ 
-                    width: `${yearSummary && yearSummary.totalRevenue > 0 ? Math.round(((yearSummary.totalCash + yearSummary.totalAdvance) / yearSummary.totalRevenue) * 100) : 50}%` 
+                    width: `${!stealth && yearSummary && yearSummary.totalRevenue > 0 ? Math.round(((yearSummary.totalCash + yearSummary.totalAdvance) / yearSummary.totalRevenue) * 100) : 0}%` 
                   }} 
                   className="bg-plaza-text h-full"
                 ></div>
                 <div 
                   style={{ 
-                    width: `${yearSummary && yearSummary.totalRevenue > 0 ? Math.round((yearSummary.totalOnline / yearSummary.totalRevenue) * 100) : 50}%` 
+                    width: `${yearSummary && yearSummary.totalRevenue > 0 ? (stealth ? 100 : Math.round((yearSummary.totalOnline / yearSummary.totalRevenue) * 100)) : 100}%` 
                   }} 
                   className="bg-plaza-accent h-full"
                 ></div>
@@ -876,7 +878,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
                             {isBest && <span className="text-amber-400 font-bold">Best Month</span>}
                           </div>
                           <div className="text-amber-400 font-bold">Revenue: ₹{m.totalRevenue.toLocaleString('en-IN')}</div>
-                          <div className="text-emerald-300">Cash: ₹{m.totalCash.toLocaleString('en-IN')}</div>
+                          {!stealth && <div className="text-emerald-300">Cash: ₹{m.totalCash.toLocaleString('en-IN')}</div>}
                           <div className="text-orange-300">Online: ₹{m.totalOnline.toLocaleString('en-IN')}</div>
                           <div className="text-[9px] text-white/60 mt-1">Days active: {m.recordedDays}</div>
                         </div>
@@ -1010,7 +1012,7 @@ export const MonthAnalyticsView: React.FC<MonthAnalyticsViewProps> = ({
                           {m.totalAdvance > 0 ? `₹${m.totalAdvance.toLocaleString('en-IN')}` : '—'}
                         </td>
                         <td className="p-3 text-right text-plaza-text-2">
-                          {m.totalCash > 0 ? `₹${m.totalCash.toLocaleString('en-IN')}` : '—'}
+                          {!stealth && m.totalCash > 0 ? `₹${m.totalCash.toLocaleString('en-IN')}` : '—'}
                         </td>
                         {activePlatforms.map(plat => {
                           const pAmt = m.platformTotals?.[plat] || 0;

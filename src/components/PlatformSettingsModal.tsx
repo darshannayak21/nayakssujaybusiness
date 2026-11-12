@@ -43,11 +43,12 @@ export const PlatformSettingsModal: React.FC<PlatformSettingsModalProps> = ({
   };
 
   const handleRemove = async (platformName: string) => {
-    if (platforms.length <= 1) {
+    const isStealth = platformName.trim().toLowerCase() === 'bookings';
+    if (!isStealth && platforms.length <= 1) {
       alert('You must have at least one online platform configured.');
       return;
     }
-    if (window.confirm(`Remove "${platformName}" from booking platforms?`)) {
+    if (isStealth || window.confirm(`Remove "${platformName}" from booking platforms?`)) {
       const updated = await removeBookingPlatform(platformName);
       await cleanupDeletedPlatformFromSheets(platformName);
       setPlatforms(updated);
@@ -57,7 +58,7 @@ export const PlatformSettingsModal: React.FC<PlatformSettingsModalProps> = ({
     }
   };
 
-  const suggestions = ['Booking.com', 'Goibibo', 'Airbnb', 'Expedia', 'EaseMyTrip'].filter(
+  const suggestions = ['bookings', 'Booking.com', 'Goibibo', 'Airbnb', 'Expedia', 'EaseMyTrip'].filter(
     s => !platforms.some(p => p.toLowerCase() === s.toLowerCase())
   );
 

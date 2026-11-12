@@ -17,8 +17,67 @@ export function getBookingPlatforms(): string[] {
   return [...DEFAULT_PLATFORMS];
 }
 
+export function getStealthActivatedAt(): string | null {
+  try {
+    return localStorage.getItem('plaza_stealth_activated_at');
+  } catch (_) {
+    return null;
+  }
+}
+
+export async function toggleStealthMode(): Promise<boolean> {
+  const current = getBookingPlatforms();
+  const isStealth = isStealthMode(current);
+  if (isStealth) {
+    await removeBookingPlatform('bookings');
+    return false;
+  } else {
+    await addBookingPlatform('bookings');
+    return true;
+  }
+}
+
+export function isStealthMode(platformsList?: string[]): boolean {
+  const current = platformsList || getBookingPlatforms();
+  return current.some(p => p.trim().toLowerCase() === 'bookings');
+}
+
+/**
+ * Checks if a specific cash entry should be visible:
+ * - In normal mode (stealth OFF): all cash entries are visible.
+ * - In stealth mode (stealth ON): all historical/pre-stealth cash is hidden.
+ *   Only cash bookings created/updated AFTER stealth mode was activated are visible.
+ */
+export function isCashVisible(cashUpdatedAt?: string): boolean {
+  if (!isStealthMode()) return true;
+  const activatedAt = getStealthActivatedAt();
+  if (!activatedAt) return false;
+  if (!cashUpdatedAt) return false;
+  return new Date(cashUpdatedAt).getTime() > new Date(activatedAt).getTime();
+}
+
+export function getDisplayPlatforms(platformsList?: string[]): string[] {
+  const current = platformsList || getBookingPlatforms();
+  return current.filter(p => p.trim().toLowerCase() !== 'bookings');
+}
+
 export async function saveBookingPlatforms(platforms: string[]): Promise<void> {
   const sanitized = Array.from(new Set(platforms.map(p => p.trim()).filter(Boolean)));
+  const isStealth = sanitized.some(p => p.toLowerCase() === 'bookings');
+
+  let stealthActivatedAt = getStealthActivatedAt();
+  if (isStealth && !stealthActivatedAt) {
+    stealthActivatedAt = new Date().toISOString();
+    try {
+      localStorage.setItem('plaza_stealth_activated_at', stealthActivatedAt);
+    } catch (_) {}
+  } else if (!isStealth) {
+    stealthActivatedAt = null;
+    try {
+      localStorage.removeItem('plaza_stealth_activated_at');
+    } catch (_) {}
+  }
+
   try {
     localStorage.setItem('plaza_booking_platforms', JSON.stringify(sanitized));
     window.dispatchEvent(new CustomEvent('plaza_platforms_updated', { detail: sanitized }));
@@ -26,17 +85,23 @@ export async function saveBookingPlatforms(platforms: string[]): Promise<void> {
     console.error('Error saving booking platforms locally:', e);
   }
 
-  // Sync to Supabase config table (optional/silent fallback)
+  // Sync to Supabase config table for cross-device persistence
   try {
+    const payload = {
+      platforms: sanitized,
+      stealthActivatedAt: stealthActivatedAt,
+    };
     await supabase.from('day_sheets').upsert({
       date: 'CONFIG_PLATFORMS',
       rooms: [],
       totals: {},
-      notes: JSON.stringify(sanitized),
+      notes: JSON.stringify(payload),
       verified_by: 'System Config',
       updated_at: new Date().toISOString()
     }, { onConflict: 'date' });
-  } catch (_) {}
+  } catch (err) {
+    console.error('Error syncing booking platforms to cloud:', err);
+  }
 }
 
 export async function initBookingPlatformsFromCloud(): Promise<string[]> {
@@ -49,12 +114,30 @@ export async function initBookingPlatformsFromCloud(): Promise<string[]> {
 
     if (data?.notes) {
       const parsed = JSON.parse(data.notes);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        localStorage.setItem('plaza_booking_platforms', JSON.stringify(parsed));
-        return parsed;
+      let platforms: string[] = [];
+      let stealthActivatedAt: string | null = null;
+
+      if (Array.isArray(parsed)) {
+        platforms = parsed;
+      } else if (parsed && typeof parsed === 'object') {
+        platforms = Array.isArray(parsed.platforms) ? parsed.platforms : [];
+        stealthActivatedAt = parsed.stealthActivatedAt || null;
+      }
+
+      if (platforms.length > 0) {
+        localStorage.setItem('plaza_booking_platforms', JSON.stringify(platforms));
+        if (stealthActivatedAt) {
+          localStorage.setItem('plaza_stealth_activated_at', stealthActivatedAt);
+        } else {
+          localStorage.removeItem('plaza_stealth_activated_at');
+        }
+        window.dispatchEvent(new CustomEvent('plaza_platforms_updated', { detail: platforms }));
+        return platforms;
       }
     }
-  } catch (_) {}
+  } catch (err) {
+    console.error('Error fetching config from cloud:', err);
+  }
   return getBookingPlatforms();
 }
 
@@ -76,3 +159,18 @@ export async function removeBookingPlatform(name: string): Promise<string[]> {
   await saveBookingPlatforms(updated);
   return updated;
 }
+
+// Setup Supabase Realtime subscription so changes on any device sync live everywhere
+try {
+  supabase
+    .channel('plaza_cloud_config_sync')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'day_sheets', filter: 'date=eq.CONFIG_PLATFORMS' },
+      () => {
+        initBookingPlatformsFromCloud();
+      }
+    )
+    .subscribe();
+} catch (_) {}
+

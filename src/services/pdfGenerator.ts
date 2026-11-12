@@ -2,7 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable, { RowInput } from 'jspdf-autotable';
 import { DaySheet, MonthSummary } from '../types';
 import { formatDateForDisplay } from './db';
-import { getBookingPlatforms } from './platforms';
+import { getBookingPlatforms, isStealthMode, isCashVisible } from './platforms';
 
 // Color constants from Nayaks_Sujay_Design_Style.md
 const HEX_ACCENT = '#F26B1D';
@@ -178,6 +178,8 @@ export function generateDailyPDF(sheet: DaySheet) {
     return `${parts[2]}/${parts[1]}`;
   };
 
+  const stealth = isStealthMode();
+
   const tableBody: RowInput[] = sheet.rooms.map((r) => {
     const isOnlinePlatform = Boolean(r.platform && r.platform !== 'Direct' && r.platform.trim().length > 0);
     const platformLabel = isOnlinePlatform ? r.platform.trim() : '';
@@ -190,10 +192,11 @@ export function generateDailyPDF(sheet: DaySheet) {
       customerCellText = customerCellText ? `${customerCellText} [${platformLabel}]` : `[${platformLabel}]`;
     }
 
+    const cashVis = isCashVisible(r.cashUpdatedAt);
     const startingStayBal = typeof r.stayBalanceRemaining === 'number' ? r.stayBalanceRemaining : 0;
-    const tbCash = typeof r.tBusinessCash === 'number' ? r.tBusinessCash : 0;
+    const tbCash = cashVis && typeof r.tBusinessCash === 'number' ? r.tBusinessCash : 0;
     const tbOnline = typeof r.tBusinessOnline === 'number' ? r.tBusinessOnline : 0;
-    const advCash = typeof r.advanceCash === 'number' ? r.advanceCash : 0;
+    const advCash = cashVis && typeof r.advanceCash === 'number' ? r.advanceCash : 0;
     const advOnline = typeof r.advanceOnline === 'number' ? r.advanceOnline : 0;
     const paidToday = advCash + advOnline + tbCash + tbOnline;
     const rent = typeof r.roomRent === 'number' ? r.roomRent : 0;
@@ -209,23 +212,28 @@ export function generateDailyPDF(sheet: DaySheet) {
       (r.stayPaidOnCheckIn && r.stayPaidOnCheckIn > 0 && !startingStayBal)
     );
 
-    let paidCellContent = formatNum(r.total);
-    if (isStayOver && (r.total === '' || !r.total || r.total === 0)) {
-      if (isFullyPaidStay) {
-        paidCellContent = 'PAID';
-      } else if (startingStayBal > 0) {
-        paidCellContent = `${formatNum(startingStayBal)} Left`;
-      }
-    } else if (hasPayment) {
-      if (remaining > 0) {
-        paidCellContent = `${formatNum(r.total)}\n(${formatNum(remaining)} left)`;
-      } else if (remaining === 0 && (isStayOver ? startingStayBal > 0 : (rent > 0 && paidToday >= rent))) {
-        paidCellContent = `${formatNum(r.total)}\n(None left)`;
+    let paidCellContent = !cashVis && (r.advanceCash || r.tBusinessCash)
+      ? (paidToday > 0 ? formatNum(paidToday) : '-')
+      : formatNum(r.total);
+
+    if (cashVis) {
+      if (isStayOver && (r.total === '' || !r.total || r.total === 0)) {
+        if (isFullyPaidStay) {
+          paidCellContent = 'PAID';
+        } else if (startingStayBal > 0) {
+          paidCellContent = `${formatNum(startingStayBal)} Left`;
+        }
+      } else if (hasPayment) {
+        if (remaining > 0) {
+          paidCellContent = `${formatNum(r.total)}\n(${formatNum(remaining)} left)`;
+        } else if (remaining === 0 && (isStayOver ? startingStayBal > 0 : (rent > 0 && paidToday >= rent))) {
+          paidCellContent = `${formatNum(r.total)}\n(None left)`;
+        }
       }
     }
 
-    let advCashCellText = isOnlinePlatform || isStayOver ? '-' : formatNum(r.advanceCash);
-    if (!isOnlinePlatform && !isStayOver && r.advanceCash && r.advanceCashDate) {
+    let advCashCellText = isOnlinePlatform || isStayOver || !cashVis ? '-' : formatNum(r.advanceCash);
+    if (cashVis && !isOnlinePlatform && !isStayOver && r.advanceCash && r.advanceCashDate) {
       advCashCellText = `${formatNum(r.advanceCash)}\n[${formatShortDate(r.advanceCashDate)}]`;
     }
 
@@ -274,7 +282,7 @@ export function generateDailyPDF(sheet: DaySheet) {
           fontStyle: r.advanceOnlineDate ? 'bold' as const : 'normal' as const
         } 
       },
-      { content: formatNum(r.tBusinessCash), styles: { halign: 'right' as const } },
+      { content: !cashVis && r.tBusinessCash !== '' ? '-' : formatNum(r.tBusinessCash), styles: { halign: 'right' as const } },
       { 
         content: formatNum(r.tBusinessOnline), 
         styles: { 
@@ -305,14 +313,14 @@ export function generateDailyPDF(sheet: DaySheet) {
     },
     { content: formatNum(sheet.totals.roomRent), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
     { content: sheet.totals.agodaBookingsCount > 0 ? `${sheet.totals.agodaBookingsCount} Agoda Bookings` : '', styles: { halign: 'left' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT, textColor: HEX_ACCENT } },
-    { content: formatNum(sheet.totals.advanceCash), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
+    { content: stealth ? '-' : formatNum(sheet.totals.advanceCash), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
     { content: formatNum(sheet.totals.advanceOnline), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
-    { content: formatNum(sheet.totals.tBusinessCash), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
+    { content: stealth ? '-' : formatNum(sheet.totals.tBusinessCash), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
     { content: formatNum(sheet.totals.tBusinessOnline), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
     { content: formatNum(sheet.totals.gst5), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
     { content: formatNum(sheet.totals.balance), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
     { content: formatNum(sheet.totals.refund), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
-    { content: formatNum(sheet.totals.total), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
+    { content: formatNum(stealth ? (sheet.totals.advanceOnline + sheet.totals.tBusinessOnline) : sheet.totals.total), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
     { content: '', styles: { fillColor: HEX_ACCENT_TINT } },
   ];
 
@@ -391,11 +399,13 @@ export function generateDailyPDF(sheet: DaySheet) {
   doc.setFontSize(7.5);
   doc.setTextColor(RGB_TEXT_MUTED[0], RGB_TEXT_MUTED[1], RGB_TEXT_MUTED[2]);
   
-  const advStr = `Advance: Rs. ${sheet.totals.advanceTotal.toLocaleString('en-IN')}`;
-  const cashStr = `Cash: Rs. ${sheet.totals.tBusinessCash.toLocaleString('en-IN')}`;
+  const visibleAdv = stealth ? sheet.totals.advanceOnline : sheet.totals.advanceTotal;
+  const advStr = `Advance: Rs. ${visibleAdv.toLocaleString('en-IN')}`;
+  const cashStr = stealth ? `Cash: Rs. 0` : `Cash: Rs. ${sheet.totals.tBusinessCash.toLocaleString('en-IN')}`;
   const agodaStr = `Online (Agoda): Rs. ${sheet.totals.tBusinessAgoda.toLocaleString('en-IN')}`;
   const othersStr = `Online (Others): Rs. ${sheet.totals.tBusinessOtherOnline.toLocaleString('en-IN')}`;
-  const dayTotStr = `Day Total: Rs. ${sheet.totals.dayTotal.toLocaleString('en-IN')}`;
+  const visibleDayTot = stealth ? (visibleAdv + sheet.totals.tBusinessOnline) : sheet.totals.dayTotal;
+  const dayTotStr = `Day Total: Rs. ${visibleDayTot.toLocaleString('en-IN')}`;
 
   doc.text(`${advStr}   |   ${cashStr}   |   ${agodaStr}   |   ${othersStr}   |   ${dayTotStr}`, margin, finalY);
 
@@ -449,18 +459,20 @@ export function generateMonthlyPDF(summary: MonthSummary) {
 
   // Dynamic Platforms (Configured platforms shown even with 0 sales; removed platforms shown ONLY if sales > 0 this month)
   const configured = getBookingPlatforms();
+  const stealth = isStealthMode(configured);
   const rawPlatforms = summary.activePlatforms && summary.activePlatforms.length > 0 
     ? summary.activePlatforms 
     : configured;
 
   const platforms = rawPlatforms.filter(p => {
+    if (p.trim().toLowerCase() === 'bookings') return false;
     if (configured.some(cp => cp.toLowerCase() === p.toLowerCase())) return true;
     const tot = summary.platformTotals?.[p] || (p.toLowerCase() === 'agoda' ? summary.totalAgoda : 0) || 0;
     return tot > 0;
   });
 
   if (platforms.length === 0) {
-    platforms.push(...(configured.length > 0 ? configured : ['Agoda']));
+    platforms.push(...(configured.filter(p => p.trim().toLowerCase() !== 'bookings').length > 0 ? configured.filter(p => p.trim().toLowerCase() !== 'bookings') : ['Agoda']));
   }
 
   // Dynamic Table Header
@@ -490,7 +502,7 @@ export function generateMonthlyPDF(summary: MonthSummary) {
       { content: String(d.dayNumber), styles: { halign: 'center' as const } },
       { content: d.formattedDate, styles: { halign: 'center' as const, fontStyle: 'normal' as const } },
       { content: formatNum(d.advanceTotal), styles: { halign: 'right' as const } },
-      { content: formatNum(d.tBusinessCash), styles: { halign: 'right' as const } },
+      { content: stealth ? '-' : formatNum(d.tBusinessCash), styles: { halign: 'right' as const } },
     ];
 
     platforms.forEach(p => {
@@ -524,7 +536,7 @@ export function generateMonthlyPDF(summary: MonthSummary) {
       styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } 
     },
     { 
-      content: summary.totalCash > 0 ? `Rs. ${summary.totalCash.toLocaleString('en-IN')}` : '-', 
+      content: (!stealth && summary.totalCash > 0) ? `Rs. ${summary.totalCash.toLocaleString('en-IN')}` : '-', 
       styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } 
     },
   ];

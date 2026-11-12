@@ -14,7 +14,7 @@ import {
   getTodayDateString,
   clearAllDatabaseData
 } from './services/db';
-import { initBookingPlatformsFromCloud } from './services/platforms';
+import { initBookingPlatformsFromCloud, toggleStealthMode } from './services/platforms';
 
 export const App: React.FC = () => {
   const [showSplash, setShowSplash] = useState<boolean>(true);
@@ -46,6 +46,18 @@ export const App: React.FC = () => {
       }
     }
     initApp();
+  }, []);
+
+  // Global stealth keyboard shortcut (Ctrl+H / Cmd+H)
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'h' || e.key === 'H')) {
+        e.preventDefault();
+        await toggleStealthMode();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // Reload sheet when currentDate changes

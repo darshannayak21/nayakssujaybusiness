@@ -2,7 +2,7 @@ import Dexie, { Table } from 'dexie';
 import { DaySheet, MonthSummary, MonthSummaryDay, MonthPerformance, YearSummary } from '../types';
 import { ROOM_DEFINITIONS, createInitialRooms, createEmptyRoomEntry, computeSheetTotals, normalizeDaySheetRooms } from '../data/rooms';
 import { supabase } from './supabase';
-import { getBookingPlatforms } from './platforms';
+import { getBookingPlatforms, isStealthMode } from './platforms';
 
 export class PlazaDatabase extends Dexie {
   sheets!: Table<DaySheet, string>;
@@ -551,16 +551,17 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
   // 2. Any platform removed from configured platforms is included ONLY IF it had actual sales (> 0) in this month.
   //    If a removed platform has 0 sales in this month, DO NOT show it in the Monthly PDF, View, or Analytics.
   const configuredPlatforms = getBookingPlatforms();
+  const stealth = isStealthMode(configuredPlatforms);
   const activePlatforms: string[] = [];
 
   configuredPlatforms.forEach(p => {
-    if (!activePlatforms.some(ap => ap.toLowerCase() === p.toLowerCase())) {
+    if (p.trim().toLowerCase() !== 'bookings' && !activePlatforms.some(ap => ap.toLowerCase() === p.toLowerCase())) {
       activePlatforms.push(p);
     }
   });
 
   Object.entries(monthPlatformSales).forEach(([plat, sales]) => {
-    if (sales > 0 && !activePlatforms.some(ap => ap.toLowerCase() === plat.toLowerCase())) {
+    if (plat.trim().toLowerCase() !== 'bookings' && sales > 0 && !activePlatforms.some(ap => ap.toLowerCase() === plat.toLowerCase())) {
       activePlatforms.push(plat);
     }
   });
@@ -592,19 +593,7 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
 
     if (sheet && (sheet.totals.dayTotal > 0 || sheet.totals.occupiedRooms > 0 || sheet.totals.total > 0)) {
       recordedDays++;
-      const t = sheet.totals;
-
-      const effectiveDayTotal = t.dayTotal > 0 ? t.dayTotal : t.total;
-      totalRevenue += effectiveDayTotal;
-      totalAdvance += t.advanceTotal;
-      totalCash += t.tBusinessCash;
-      totalAgoda += t.tBusinessAgoda;
-      totalOtherOnline += t.tBusinessOtherOnline;
-      totalOnline += t.tBusinessOnline;
-      totalGst += t.gst5;
-      totalRefund += t.refund;
-      totalBalance += t.balance;
-      totalOccupancySum += t.occupiedRooms;
+      const t = sheet.rooms && sheet.rooms.length > 0 ? computeSheetTotals(sheet.rooms) : sheet.totals;
 
       // Accumulate dynamic platform totals
       const dayPlatTotals: Record<string, number> = {};
@@ -613,6 +602,21 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
         dayPlatTotals[p] = amt;
         monthPlatformTotals[p] = (monthPlatformTotals[p] || 0) + amt;
       });
+
+      const dayAdvTotal = t.advanceTotal;
+      const dayTBCash = t.tBusinessCash;
+      const effectiveDayTotal = t.dayTotal > 0 ? t.dayTotal : t.total;
+
+      totalRevenue += effectiveDayTotal;
+      totalAdvance += dayAdvTotal;
+      totalCash += dayTBCash;
+      totalAgoda += t.tBusinessAgoda;
+      totalOtherOnline += t.tBusinessOtherOnline;
+      totalOnline += t.tBusinessOnline;
+      totalGst += t.gst5;
+      totalRefund += t.refund;
+      totalBalance += t.balance;
+      totalOccupancySum += t.occupiedRooms;
 
       if (!peakDay || effectiveDayTotal > peakDay.revenue) {
         peakDay = { date: dStr, revenue: effectiveDayTotal };
@@ -629,8 +633,8 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
         formattedDate,
         hasData: true,
         totals: t,
-        advanceTotal: t.advanceTotal,
-        tBusinessCash: t.tBusinessCash,
+        advanceTotal: dayAdvTotal,
+        tBusinessCash: dayTBCash,
         agodaOnline: t.tBusinessAgoda,
         platformTotals: dayPlatTotals,
         otherOnline: t.tBusinessOtherOnline,
@@ -694,7 +698,7 @@ export async function getYearSummary(year: number): Promise<YearSummary> {
   const configuredPlatforms = getBookingPlatforms();
   const activePlatforms: string[] = [];
   configuredPlatforms.forEach(p => {
-    if (!activePlatforms.some(ap => ap.toLowerCase() === p.toLowerCase())) {
+    if (p.trim().toLowerCase() !== 'bookings' && !activePlatforms.some(ap => ap.toLowerCase() === p.toLowerCase())) {
       activePlatforms.push(p);
     }
   });

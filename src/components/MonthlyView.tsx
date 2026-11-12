@@ -10,7 +10,7 @@ import {
 import { MonthSummary } from '../types';
 import { getMonthSummary, getDaySheet } from '../services/db';
 import { generateMonthlyPDF, generateDailyPDF } from '../services/pdfGenerator';
-import { getBookingPlatforms } from '../services/platforms';
+import { getBookingPlatforms, isStealthMode } from '../services/platforms';
 
 interface MonthlyViewProps {
   initialYear?: number;
@@ -149,15 +149,19 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
 
       {(() => {
         const configured = getBookingPlatforms();
+        const stealth = isStealthMode(configured);
         const rawPlatforms = summary?.activePlatforms && summary.activePlatforms.length > 0 
           ? summary.activePlatforms 
           : configured;
         const filteredPlatforms = rawPlatforms.filter(p => {
+          if (p.trim().toLowerCase() === 'bookings') return false;
           if (configured.some(cp => cp.toLowerCase() === p.toLowerCase())) return true;
           const tot = summary?.platformTotals?.[p] || (p.toLowerCase() === 'agoda' ? summary?.totalAgoda || 0 : 0) || 0;
           return tot > 0;
         });
-        const displayPlatforms = filteredPlatforms.length > 0 ? filteredPlatforms : (configured.length > 0 ? configured : ['Agoda']);
+        const displayPlatforms = filteredPlatforms.length > 0 
+          ? filteredPlatforms 
+          : (configured.filter(p => p.trim().toLowerCase() !== 'bookings').length > 0 ? configured.filter(p => p.trim().toLowerCase() !== 'bookings') : ['Agoda']);
 
         return (
           <>
@@ -181,7 +185,7 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
                     Total Cash Collected
                   </span>
                   <div className="text-xl lg:text-2xl font-bold text-plaza-text tracking-tight mt-1.5">
-                    ₹{summary.totalCash.toLocaleString('en-IN')}
+                    ₹{stealth ? '0' : summary.totalCash.toLocaleString('en-IN')}
                   </div>
                   <div className="text-[11px] text-plaza-text-3 mt-1">
                     T. Business Cash column
@@ -259,7 +263,7 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
                               {day.advanceTotal > 0 ? `₹${day.advanceTotal.toLocaleString('en-IN')}` : '—'}
                             </td>
                             <td className="p-3 text-right text-plaza-text-2">
-                              {day.tBusinessCash > 0 ? `₹${day.tBusinessCash.toLocaleString('en-IN')}` : '—'}
+                              {!stealth && day.tBusinessCash > 0 ? `₹${day.tBusinessCash.toLocaleString('en-IN')}` : '—'}
                             </td>
                             {displayPlatforms.map((plat) => {
                               const amt = day.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? day.agodaOnline : 0);
@@ -307,7 +311,7 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
                           {summary.totalAdvance > 0 ? `₹${summary.totalAdvance.toLocaleString('en-IN')}` : '—'}
                         </td>
                         <td className="p-3 text-right">
-                          {summary.totalCash > 0 ? `₹${summary.totalCash.toLocaleString('en-IN')}` : '—'}
+                          {!stealth && summary.totalCash > 0 ? `₹${summary.totalCash.toLocaleString('en-IN')}` : '—'}
                         </td>
                         {displayPlatforms.map((plat) => {
                           const tot = summary.platformTotals?.[plat] || (plat.toLowerCase() === 'agoda' ? summary.totalAgoda : 0);

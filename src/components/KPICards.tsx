@@ -1,6 +1,7 @@
 import React from 'react';
 import { IndianRupee, CreditCard, Banknote, Percent, BedDouble } from 'lucide-react';
 import { DaySheetTotals } from '../types';
+import { isStealthMode } from '../services/platforms';
 
 interface KPICardsProps {
   totals: DaySheetTotals;
@@ -8,6 +9,11 @@ interface KPICardsProps {
 }
 
 export const KPICards: React.FC<KPICardsProps> = ({ totals, isMonthly = false }) => {
+  const stealth = isStealthMode();
+  const visibleTotal = stealth 
+    ? Math.max(0, totals.total - totals.advanceCash - totals.tBusinessCash)
+    : totals.total;
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 mb-6">
       {/* Card 1: Total Revenue */}
@@ -21,7 +27,7 @@ export const KPICards: React.FC<KPICardsProps> = ({ totals, isMonthly = false })
           </div>
         </div>
         <div className="text-xl lg:text-2xl font-bold text-plaza-text tracking-tight">
-          ₹{totals.total.toLocaleString('en-IN')}
+          ₹{visibleTotal.toLocaleString('en-IN')}
         </div>
         <div className="text-[11px] text-plaza-text-3 mt-1 flex items-center gap-1.5">
           <span>Rent billed: ₹{totals.roomRent.toLocaleString('en-IN')}</span>
@@ -39,10 +45,12 @@ export const KPICards: React.FC<KPICardsProps> = ({ totals, isMonthly = false })
           </div>
         </div>
         <div className="text-xl lg:text-2xl font-bold text-plaza-text tracking-tight">
-          ₹{(totals.tBusinessCash + totals.advanceCash).toLocaleString('en-IN')}
+          ₹{stealth ? '0' : (totals.tBusinessCash + totals.advanceCash).toLocaleString('en-IN')}
         </div>
         <div className="text-[11px] text-plaza-text-3 mt-1">
-          Adv: ₹{totals.advanceCash.toLocaleString('en-IN')} | TB: ₹{totals.tBusinessCash.toLocaleString('en-IN')}
+          {stealth 
+            ? 'Adv: ₹0 | TB: ₹0' 
+            : `Adv: ₹${totals.advanceCash.toLocaleString('en-IN')} | TB: ₹${totals.tBusinessCash.toLocaleString('en-IN')}`}
         </div>
       </div>
 

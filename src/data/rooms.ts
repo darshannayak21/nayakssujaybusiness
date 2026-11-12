@@ -1,5 +1,6 @@
 import { RoomEntry, DaySheetTotals } from '../types';
-
+import { isCashVisible } from '../services/platforms';
+  
 export interface RoomDefinition {
   slNo: number;
   roomNumber: string;
@@ -135,15 +136,16 @@ export function normalizeDaySheetRooms(parsedRooms: any[]): RoomEntry[] {
 }
 
 export function calculateRoomTotal(room: RoomEntry): number | '' {
-  const advCash = typeof room.advanceCash === 'number' ? room.advanceCash : 0;
+  const cashVisible = isCashVisible(room.cashUpdatedAt);
+  const advCash = (cashVisible && typeof room.advanceCash === 'number') ? room.advanceCash : 0;
   const advOnline = typeof room.advanceOnline === 'number' ? room.advanceOnline : 0;
-  const tbCash = typeof room.tBusinessCash === 'number' ? room.tBusinessCash : 0;
+  const tbCash = (cashVisible && typeof room.tBusinessCash === 'number') ? room.tBusinessCash : 0;
   const tbOnline = typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : 0;
   
   const hasPayment = (
-    room.advanceCash !== '' || 
+    (cashVisible && room.advanceCash !== '') || 
     room.advanceOnline !== '' || 
-    room.tBusinessCash !== '' || 
+    (cashVisible && room.tBusinessCash !== '') || 
     room.tBusinessOnline !== ''
   );
 
@@ -219,9 +221,10 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
       // For online platforms, advance does not apply (paid through OTA)
     } else {
       // Direct / Walk-in guests
-      if (typeof r.advanceCash === 'number') advanceCash += r.advanceCash;
+      const cashVisible = isCashVisible(r.cashUpdatedAt);
+      if (cashVisible && typeof r.advanceCash === 'number') advanceCash += r.advanceCash;
       if (typeof r.advanceOnline === 'number') advanceOnline += r.advanceOnline;
-      if (typeof r.tBusinessCash === 'number') tBusinessCash += r.tBusinessCash;
+      if (cashVisible && typeof r.tBusinessCash === 'number') tBusinessCash += r.tBusinessCash;
       if (typeof r.tBusinessOnline === 'number') tBusinessOtherOnline += r.tBusinessOnline;
     }
 
