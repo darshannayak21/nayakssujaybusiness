@@ -1,5 +1,5 @@
 import { RoomEntry, DaySheetTotals } from '../types';
-import { isCashVisible } from '../services/platforms';
+import { isCashVisible, isCashOnlyHiddenBooking } from '../services/platforms';
   
 export interface RoomDefinition {
   slNo: number;
@@ -173,6 +173,11 @@ export function computeSheetTotals(rooms: RoomEntry[]): DaySheetTotals {
   const platformBookingsCount: Record<string, number> = {};
 
   rooms.forEach(r => {
+    if (isCashOnlyHiddenBooking(r)) {
+      r.status = 'vacant';
+      return;
+    }
+
     // Only add room rent if NOT a stayover (since rent is accounted on check-in day)
     if (r.stayType !== 'stayover') {
       if (typeof r.roomRent === 'number') roomRent += r.roomRent;

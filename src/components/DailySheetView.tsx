@@ -19,7 +19,7 @@ import { DaySheet, RoomEntry } from '../types';
 import { calculateRoomTotal, computeSheetTotals, createEmptyRoomEntry, ROOM_DEFINITIONS } from '../data/rooms';
 import { formatDateForDisplay } from '../services/db';
 import { generateDailyPDF } from '../services/pdfGenerator';
-import { getBookingPlatforms, isStealthMode, isCashVisible, getDisplayPlatforms } from '../services/platforms';
+import { getBookingPlatforms, isStealthMode, isCashVisible, isCashOnlyHiddenBooking, getDisplayPlatforms } from '../services/platforms';
 import { StayDatesModal } from './StayDatesModal';
 
 interface DailySheetViewProps {
@@ -526,20 +526,21 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
           </div>
 
           {filteredRooms.map((room) => {
-            const isOnlinePlatform = Boolean(room.platform && room.platform !== 'Direct');
+            const isCashHiddenGuest = isCashOnlyHiddenBooking(room);
+            const isOnlinePlatform = !isCashHiddenGuest && Boolean(room.platform && room.platform !== 'Direct');
             const platformLabel = isOnlinePlatform ? room.platform : '';
 
-            const cardRentVal = typeof room.roomRent === 'number' ? room.roomRent : 0;
-            const cardAdvCashVis = isCashVisible(room.cashUpdatedAt);
+            const cardRentVal = isCashHiddenGuest ? 0 : (typeof room.roomRent === 'number' ? room.roomRent : 0);
+            const cardAdvCashVis = !isCashHiddenGuest && isCashVisible(room.cashUpdatedAt);
             const cardAdvCash = (cardAdvCashVis && typeof room.advanceCash === 'number') ? room.advanceCash : 0;
-            const cardAdvOnline = typeof room.advanceOnline === 'number' ? room.advanceOnline : 0;
+            const cardAdvOnline = !isCashHiddenGuest && typeof room.advanceOnline === 'number' ? room.advanceOnline : 0;
             const cardTBCash = (cardAdvCashVis && typeof room.tBusinessCash === 'number') ? room.tBusinessCash : 0;
-            const cardTBOnline = typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : 0;
+            const cardTBOnline = !isCashHiddenGuest && typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : 0;
             const cardTotalAdv = cardAdvCash + cardAdvOnline;
             const cardTotalTB = cardTBCash + cardTBOnline;
             const cardTotalPaid = cardTotalAdv + cardTotalTB;
             const cardStartingStayBal = typeof room.stayBalanceRemaining === 'number' ? room.stayBalanceRemaining : 0;
-            const isStayOver = room.stayType === 'stayover';
+            const isStayOver = !isCashHiddenGuest && room.stayType === 'stayover';
 
             const cardRemaining = isStayOver 
               ? Math.max(0, cardStartingStayBal - cardTotalTB)
@@ -578,7 +579,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                     <span className="w-10 h-7 rounded-lg bg-plaza-accent-tint text-plaza-text font-bold text-sm flex items-center justify-center">
                       {room.roomNumber}
                     </span>
-                    {room.isExtraEntry && (
+                    {!isCashHiddenGuest && room.isExtraEntry && (
                       <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-plaza-accent text-white uppercase tracking-wider">
                         2nd Entry
                       </span>
@@ -586,12 +587,12 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                     <span className="text-[10px] uppercase font-bold text-plaza-text-3">
                       Floor {room.floor}
                     </span>
-                    {isStayOver && (
+                    {!isCashHiddenGuest && isStayOver && (
                       <span className="text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-plaza-accent-tint text-plaza-accent border border-plaza-accent-line uppercase tracking-wide">
                         Reserved
                       </span>
                     )}
-                    {room.total && typeof room.total === 'number' && room.total > 0 ? (
+                    {!isCashHiddenGuest && (room.total && typeof room.total === 'number' && room.total > 0 ? (
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                         cardRemaining > 0 ? 'text-rose-700 bg-rose-50 border-rose-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'
                       }`}>
@@ -605,11 +606,11 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
                         ₹{cardRemaining} left
                       </span>
-                    ) : null}
+                    ) : null)}
                   </div>
                   
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                    {room.isExtraEntry ? (
+                    {!isCashHiddenGuest && (room.isExtraEntry ? (
                       <button
                         type="button"
                         onClick={() => handleRemoveExtraRoomEntry(room.originalIndex)}
@@ -628,21 +629,23 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         <Plus className="w-3 h-3" />
                         2nd Booking
                       </button>
-                    )}
+                    ))}
 
                     {/* Stay Dates button */}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenStayModal(room.originalIndex)}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-bold transition ${
-                        room.stayDays && room.stayDays > 1
-                          ? 'border-plaza-accent bg-plaza-accent-tint text-plaza-accent'
-                          : 'border-plaza-line text-plaza-text-3 hover:border-plaza-accent'
-                      }`}
-                    >
-                      <CalendarIcon className="w-3 h-3" />
-                      <span>{room.stayDays && room.stayDays > 1 ? `${formatShortDate(room.checkInDate)} → ${formatShortDate(room.checkOutDate)} (${room.stayDays}d)` : '1 Night'}</span>
-                    </button>
+                    {!isCashHiddenGuest && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenStayModal(room.originalIndex)}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-bold transition ${
+                          room.stayDays && room.stayDays > 1
+                            ? 'border-plaza-accent bg-plaza-accent-tint text-plaza-accent'
+                            : 'border-plaza-line text-plaza-text-3 hover:border-plaza-accent'
+                        }`}
+                      >
+                        <CalendarIcon className="w-3 h-3" />
+                        <span>{room.stayDays && room.stayDays > 1 ? `${formatShortDate(room.checkInDate)} → ${formatShortDate(room.checkOutDate)} (${room.stayDays}d)` : '1 Night'}</span>
+                      </button>
+                    )}
 
                     {isOnlinePlatform ? (
                       <span className="px-2.5 py-0.5 rounded-full bg-plaza-accent text-white text-[10px] font-bold tracking-wider uppercase shadow-2xs">
@@ -664,9 +667,10 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. Abhishek Joshi"
-                        value={room.customerName}
+                        placeholder={isCashHiddenGuest ? "—" : "e.g. Abhishek Joshi"}
+                        value={isCashHiddenGuest ? '' : room.customerName}
                         onChange={(e) => handleFieldChange(room.originalIndex, 'customerName', e.target.value)}
+                        readOnly={isCashHiddenGuest}
                         className="w-full px-2.5 py-1.5 rounded-xl border border-plaza-line focus:border-plaza-accent focus:outline-none font-medium text-xs bg-white"
                       />
                     </div>
@@ -675,8 +679,9 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         Platform / Source
                       </label>
                       <select
-                        value={room.platform || 'Direct'}
+                        value={isCashHiddenGuest ? 'Direct' : (room.platform || 'Direct')}
                         onChange={(e) => handleFieldChange(room.originalIndex, 'platform', e.target.value)}
+                        disabled={isCashHiddenGuest}
                         className={`w-full px-2.5 py-1.5 rounded-xl border focus:outline-none font-bold text-xs transition ${
                           isOnlinePlatform 
                             ? 'bg-plaza-accent-tint text-plaza-accent border-plaza-accent' 
@@ -702,8 +707,9 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       <input
                         type="number"
                         placeholder="₹ 0"
-                        value={room.roomRent}
+                        value={isCashHiddenGuest ? '' : room.roomRent}
                         onChange={(e) => handleFieldChange(room.originalIndex, 'roomRent', e.target.value)}
+                        readOnly={isCashHiddenGuest}
                         className="w-full text-right px-2.5 py-1.5 rounded-xl border border-plaza-line focus:border-plaza-accent focus:outline-none font-medium text-xs"
                       />
                     </div>
@@ -866,8 +872,9 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       <input
                         type="number"
                         placeholder="₹ 0"
-                        value={room.gst5}
+                        value={isCashHiddenGuest ? '' : room.gst5}
                         onChange={(e) => handleFieldChange(room.originalIndex, 'gst5', e.target.value)}
+                        readOnly={isCashHiddenGuest}
                         className="w-full text-right px-2 py-1 rounded-lg border border-plaza-line text-xs"
                       />
                     </div>
@@ -878,8 +885,9 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       <input
                         type="text"
                         placeholder="e.g. 11:00 AM"
-                        value={room.checkOut}
+                        value={isCashHiddenGuest ? '' : room.checkOut}
                         onChange={(e) => handleFieldChange(room.originalIndex, 'checkOut', e.target.value)}
+                        readOnly={isCashHiddenGuest}
                         className="w-full text-center px-2 py-1 rounded-lg border border-plaza-line text-xs"
                       />
                     </div>
@@ -1031,18 +1039,19 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
 
               <tbody>
                 {sheet.rooms.map((room, idx) => {
+                  const isCashHiddenGuest = isCashOnlyHiddenBooking(room);
                   const isNewFloor = idx === 0 || room.floor !== sheet.rooms[idx - 1]?.floor;
-                  const isOnlinePlatform = Boolean(room.platform && room.platform !== 'Direct');
+                  const isOnlinePlatform = !isCashHiddenGuest && Boolean(room.platform && room.platform !== 'Direct');
                   const platformLabel = isOnlinePlatform ? room.platform : '';
 
-                  const rentVal = typeof room.roomRent === 'number' ? room.roomRent : 0;
-                  const cashVis = isCashVisible(room.cashUpdatedAt);
+                  const rentVal = isCashHiddenGuest ? 0 : (typeof room.roomRent === 'number' ? room.roomRent : 0);
+                  const cashVis = !isCashHiddenGuest && isCashVisible(room.cashUpdatedAt);
                   const advCashVal = (cashVis && typeof room.advanceCash === 'number') ? room.advanceCash : 0;
-                  const advOnlineVal = typeof room.advanceOnline === 'number' ? room.advanceOnline : 0;
+                  const advOnlineVal = !isCashHiddenGuest && typeof room.advanceOnline === 'number' ? room.advanceOnline : 0;
                   const tbCashVal = (cashVis && typeof room.tBusinessCash === 'number') ? room.tBusinessCash : 0;
-                  const tbOnlineVal = typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : 0;
+                  const tbOnlineVal = !isCashHiddenGuest && typeof room.tBusinessOnline === 'number' ? room.tBusinessOnline : 0;
 
-                  const isStayOver = room.stayType === 'stayover';
+                  const isStayOver = !isCashHiddenGuest && room.stayType === 'stayover';
                   const totalAdvancePaid = advCashVal + advOnlineVal;
                   const totalTBPaid = tbCashVal + tbOnlineVal;
                   const totalPaidToday = totalAdvancePaid + totalTBPaid;
@@ -1052,18 +1061,18 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                     ? Math.max(0, startingStayBalance - totalTBPaid)
                     : (rentVal > 0 ? Math.max(0, rentVal - totalPaidToday) : 0);
 
-                  const hasPayment = (typeof room.total === 'number' && room.total > 0) || totalPaidToday > 0;
+                  const hasPayment = !isCashHiddenGuest && ((typeof room.total === 'number' && room.total > 0) || totalPaidToday > 0);
                   const isFullyPaidStay = isStayOver && (
                     startingStayBalance === 0 || 
                     (startingStayBalance > 0 && remainingLeft === 0) ||
                     (room.stayPaidOnCheckIn && room.stayPaidOnCheckIn > 0 && !startingStayBalance)
                   );
 
-                  const showLeftHint = remainingLeft > 0 && (
+                  const showLeftHint = !isCashHiddenGuest && remainingLeft > 0 && (
                     isStayOver ? true : (rentVal > 0 && totalPaidToday > 0)
                   );
 
-                  const showNoneLeftHint = remainingLeft === 0 && (
+                  const showNoneLeftHint = !isCashHiddenGuest && remainingLeft === 0 && (
                     isStayOver 
                       ? (startingStayBalance > 0 && totalTBPaid > 0)
                       : (rentVal > 0 && totalPaidToday >= rentVal && totalPaidToday > 0)
@@ -1073,7 +1082,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                     <tr
                       key={`${room.roomNumber}-${idx}`}
                       className={`hover:bg-amber-50/20 transition-colors border-b border-plaza-line/60 ${
-                        isStayOver ? 'bg-amber-50/10' : ''
+                        !isCashHiddenGuest && isStayOver ? 'bg-amber-50/10' : ''
                       } ${isNewFloor ? 'border-t-2 border-t-plaza-accent' : ''}`}
                     >
                       {/* SL NO - Sticky on mobile */}
@@ -1085,7 +1094,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       <td className="border-r border-plaza-line text-center py-1.5 px-2 font-bold text-plaza-text bg-plaza-accent-tint sticky left-10 z-10">
                         <div className="flex items-center justify-center gap-1.5 group/room">
                           <span>{room.roomNumber}</span>
-                          {room.isExtraEntry ? (
+                          {!isCashHiddenGuest && (room.isExtraEntry ? (
                             <div className="inline-flex items-center gap-0.5">
                               <span className="text-[8px] px-1 py-0.5 rounded-full bg-plaza-accent text-white font-bold tracking-wider leading-none select-none">
                                 2ND
@@ -1114,7 +1123,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                             >
                               <Plus className="w-2.5 h-2.5" />
                             </button>
-                          )}
+                          ))}
                         </div>
                       </td>
 
@@ -1122,9 +1131,10 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       <td className="border-r border-plaza-line p-1">
                         <input
                           type="number"
-                          placeholder={isStayOver ? "—" : "—"}
-                          value={room.roomRent}
+                          placeholder="—"
+                          value={isCashHiddenGuest ? '' : room.roomRent}
                           onChange={(e) => handleFieldChange(idx, 'roomRent', e.target.value)}
+                          readOnly={isCashHiddenGuest}
                           className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none font-medium transition"
                         />
                       </td>
@@ -1134,12 +1144,13 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         <div className="flex items-center gap-1.5">
                           <input
                             type="text"
-                            placeholder="Guest name"
-                            value={room.customerName}
+                            placeholder={isCashHiddenGuest ? "—" : "Guest name"}
+                            value={isCashHiddenGuest ? '' : room.customerName}
                             onChange={(e) => handleFieldChange(idx, 'customerName', e.target.value)}
+                            readOnly={isCashHiddenGuest}
                             className="w-full px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none text-[12px] font-medium transition"
                           />
-                          {isStayOver && (
+                          {!isCashHiddenGuest && isStayOver && (
                             <span 
                               className="shrink-0 px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-plaza-accent-tint text-plaza-accent border border-plaza-accent-line uppercase tracking-wider select-none"
                               title={`Continuing multi-day reservation from ${room.checkInDate}`}
@@ -1152,7 +1163,9 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
 
                       {/* STAY DATES PICKER */}
                       <td className="border-r border-plaza-line p-1 text-center">
-                        {room.stayDays && room.stayDays > 1 ? (
+                        {isCashHiddenGuest ? (
+                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none">—</div>
+                        ) : room.stayDays && room.stayDays > 1 ? (
                           <button
                             type="button"
                             onClick={() => handleOpenStayModal(idx)}
@@ -1185,8 +1198,9 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       {/* PLATFORM / SOURCE DROPDOWN */}
                       <td className="border-r border-plaza-line p-1">
                         <select
-                          value={room.platform || 'Direct'}
+                          value={isCashHiddenGuest ? 'Direct' : (room.platform || 'Direct')}
                           onChange={(e) => handleFieldChange(idx, 'platform', e.target.value)}
+                          disabled={isCashHiddenGuest}
                           className={`w-full text-[11px] font-semibold py-1 px-1.5 rounded-md border transition cursor-pointer focus:outline-none focus:border-plaza-accent ${
                             isOnlinePlatform 
                               ? 'bg-plaza-accent-tint text-plaza-accent border-plaza-accent font-bold' 
@@ -1204,8 +1218,10 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       </td>
 
                       {/* ADVANCE CASH (Disabled for online platforms & stay-overs) */}
-                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform || isStayOver || (!cashVis && room.advanceCash !== '') ? 'bg-plaza-card/40' : ''}`}>
-                        {isStayOver ? (
+                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform || isStayOver || isCashHiddenGuest || (!cashVis && room.advanceCash !== '') ? 'bg-plaza-card/40' : ''}`}>
+                        {isCashHiddenGuest ? (
+                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none">—</div>
+                        ) : isStayOver ? (
                           <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none" title="Advance collected on check-in day">
                             —
                           </div>
@@ -1260,8 +1276,10 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       </td>
 
                       {/* ADVANCE ONLINE (Disabled for online platforms & stay-overs) */}
-                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform || isStayOver ? 'bg-plaza-card/40' : ''}`}>
-                        {isStayOver ? (
+                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform || isStayOver || isCashHiddenGuest ? 'bg-plaza-card/40' : ''}`}>
+                        {isCashHiddenGuest ? (
+                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none">—</div>
+                        ) : isStayOver ? (
                           <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none" title="Advance collected on check-in day">
                             —
                           </div>
@@ -1312,8 +1330,8 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       </td>
 
                       {/* T. BUSINESS CASH */}
-                      <td className={`border-r border-plaza-line p-1 ${!cashVis && room.tBusinessCash !== '' ? 'bg-plaza-card/40' : ''}`}>
-                        {!cashVis && room.tBusinessCash !== '' ? (
+                      <td className={`border-r border-plaza-line p-1 ${isCashHiddenGuest || (!cashVis && room.tBusinessCash !== '') ? 'bg-plaza-card/40' : ''}`}>
+                        {isCashHiddenGuest || (!cashVis && room.tBusinessCash !== '') ? (
                           <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none">
                             —
                           </div>
@@ -1349,28 +1367,32 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       </td>
 
                       {/* T. BUSINESS ONLINE */}
-                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform ? 'bg-amber-50/50' : ''}`}>
-                        <input
-                          type="number"
-                          placeholder={
-                            isStayOver && isFullyPaidStay && room.tBusinessOnline === ''
-                              ? "PAID"
-                              : isOnlinePlatform 
-                              ? `${platformLabel} ₹` 
-                              : showLeftHint && room.tBusinessCash === '' && room.tBusinessOnline === '' 
-                              ? `${remainingLeft} left` 
-                              : "—"
-                          }
-                          value={room.tBusinessOnline}
-                          onChange={(e) => handleFieldChange(idx, 'tBusinessOnline', e.target.value)}
-                          className={`w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none font-medium transition ${
-                            isStayOver && isFullyPaidStay && room.tBusinessOnline === ''
-                              ? 'placeholder:text-emerald-700 placeholder:font-bold placeholder:text-center'
-                              : isOnlinePlatform 
-                              ? 'text-plaza-accent font-bold placeholder:text-plaza-accent/60' 
-                              : 'text-plaza-text'
-                          }`}
-                        />
+                      <td className={`border-r border-plaza-line p-1 ${isOnlinePlatform ? 'bg-amber-50/50' : isCashHiddenGuest ? 'bg-plaza-card/40' : ''}`}>
+                        {isCashHiddenGuest ? (
+                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none">—</div>
+                        ) : (
+                          <input
+                            type="number"
+                            placeholder={
+                              isStayOver && isFullyPaidStay && room.tBusinessOnline === ''
+                                ? "PAID"
+                                : isOnlinePlatform 
+                                ? `${platformLabel} ₹` 
+                                : showLeftHint && room.tBusinessCash === '' && room.tBusinessOnline === '' 
+                                ? `${remainingLeft} left` 
+                                : "—"
+                            }
+                            value={room.tBusinessOnline}
+                            onChange={(e) => handleFieldChange(idx, 'tBusinessOnline', e.target.value)}
+                            className={`w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none font-medium transition ${
+                              isStayOver && isFullyPaidStay && room.tBusinessOnline === ''
+                                ? 'placeholder:text-emerald-700 placeholder:font-bold placeholder:text-center'
+                                : isOnlinePlatform 
+                                ? 'text-plaza-accent font-bold placeholder:text-plaza-accent/60' 
+                                : 'text-plaza-text'
+                            }`}
+                          />
+                        )}
                         {showLeftHint && (
                           <div className="text-[9.5px] font-semibold text-rose-500 text-right pr-1 leading-none mt-0.5 select-none tracking-tight">
                             {remainingLeft} left
@@ -1388,8 +1410,9 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         <input
                           type="number"
                           placeholder="—"
-                          value={room.gst5}
+                          value={isCashHiddenGuest ? '' : room.gst5}
                           onChange={(e) => handleFieldChange(idx, 'gst5', e.target.value)}
+                          readOnly={isCashHiddenGuest}
                           className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none text-plaza-text-2 transition"
                         />
                       </td>
@@ -1399,8 +1422,9 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         <input
                           type="number"
                           placeholder="—"
-                          value={room.balance}
+                          value={isCashHiddenGuest ? '' : room.balance}
                           onChange={(e) => handleFieldChange(idx, 'balance', e.target.value)}
+                          readOnly={isCashHiddenGuest}
                           className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none text-plaza-text-2 transition"
                         />
                       </td>
@@ -1410,15 +1434,18 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                         <input
                           type="number"
                           placeholder="—"
-                          value={room.refund}
+                          value={isCashHiddenGuest ? '' : room.refund}
                           onChange={(e) => handleFieldChange(idx, 'refund', e.target.value)}
+                          readOnly={isCashHiddenGuest}
                           className="w-full text-right px-2 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none text-amber-700 transition"
                         />
                       </td>
 
                       {/* PAID COLUMN */}
                       <td className="border-r border-plaza-line p-1">
-                        {isStayOver && (room.total === '' || room.total === 0) ? (
+                        {isCashHiddenGuest ? (
+                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none">—</div>
+                        ) : isStayOver && (room.total === '' || room.total === 0) ? (
                           isFullyPaidStay ? (
                             <div className="w-full text-center py-1">
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10.5px] font-bold shadow-2xs">
@@ -1461,9 +1488,10 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                       <td className="p-1">
                         <input
                           type="text"
-                          placeholder={isStayOver && room.checkOutDate ? `Dep: ${formatShortDate(room.checkOutDate)}` : "—"}
-                          value={room.checkOut}
+                          placeholder={isCashHiddenGuest ? "—" : (isStayOver && room.checkOutDate ? `Dep: ${formatShortDate(room.checkOutDate)}` : "—")}
+                          value={isCashHiddenGuest ? '' : room.checkOut}
                           onChange={(e) => handleFieldChange(idx, 'checkOut', e.target.value)}
+                          readOnly={isCashHiddenGuest}
                           className="w-full text-center px-1.5 py-1 rounded-md border border-transparent hover:border-plaza-line focus:border-plaza-accent focus:bg-white focus:outline-none text-[11px] transition"
                         />
                       </td>
@@ -1480,7 +1508,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                     {sheet.totals.roomRent > 0 ? `₹${sheet.totals.roomRent.toLocaleString('en-IN')}` : '—'}
                   </td>
                   <td className="border-r border-plaza-line py-3 px-2 text-left text-xs text-plaza-text-3">
-                    {sheet.rooms.filter(r => r.customerName).length > 0 ? `${sheet.rooms.filter(r => r.customerName).length} Guests` : '—'}
+                    {sheet.rooms.filter(r => !isCashOnlyHiddenBooking(r) && r.customerName).length > 0 ? `${sheet.rooms.filter(r => !isCashOnlyHiddenBooking(r) && r.customerName).length} Guests` : '—'}
                   </td>
                   <td className="border-r border-plaza-line py-3 px-2 text-center text-xs text-plaza-text-3 font-semibold">
                     —

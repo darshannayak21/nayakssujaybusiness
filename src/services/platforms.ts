@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { RoomEntry } from '../types';
 
 export const DEFAULT_PLATFORMS = ['Agoda', 'MMT'];
 
@@ -54,6 +55,37 @@ export function isCashVisible(cashUpdatedAt?: string): boolean {
   if (!activatedAt) return false;
   if (!cashUpdatedAt) return false;
   return new Date(cashUpdatedAt).getTime() > new Date(activatedAt).getTime();
+}
+
+/**
+ * Determines whether a room's booking was made/paid by cash and should be completely
+ * hidden (disappearing customer name, room rent, amounts, and occupancy) during stealth mode.
+ */
+export function isCashOnlyHiddenBooking(room: RoomEntry): boolean {
+  if (!isStealthMode()) return false;
+
+  const isOnlinePlatform = Boolean(room.platform && room.platform !== 'Direct' && room.platform.trim().length > 0);
+  if (isOnlinePlatform) return false;
+
+  const hasOnlinePayment = (typeof room.advanceOnline === 'number' && room.advanceOnline > 0) ||
+                           (typeof room.tBusinessOnline === 'number' && room.tBusinessOnline > 0);
+  if (hasOnlinePayment) return false;
+
+  const hasVisibleCash = isCashVisible(room.cashUpdatedAt) && (
+    (typeof room.advanceCash === 'number' && room.advanceCash > 0) ||
+    (typeof room.tBusinessCash === 'number' && room.tBusinessCash > 0)
+  );
+  if (hasVisibleCash) return false;
+
+  const hasBookingData = Boolean(
+    (room.customerName && room.customerName.trim().length > 0) ||
+    (typeof room.roomRent === 'number' && room.roomRent > 0) ||
+    (typeof room.advanceCash === 'number' && room.advanceCash > 0) ||
+    (typeof room.tBusinessCash === 'number' && room.tBusinessCash > 0) ||
+    room.stayType === 'stayover'
+  );
+
+  return hasBookingData;
 }
 
 export function getDisplayPlatforms(platformsList?: string[]): string[] {

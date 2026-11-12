@@ -2,7 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable, { RowInput } from 'jspdf-autotable';
 import { DaySheet, MonthSummary } from '../types';
 import { formatDateForDisplay } from './db';
-import { getBookingPlatforms, isStealthMode, isCashVisible } from './platforms';
+import { getBookingPlatforms, isStealthMode, isCashVisible, isCashOnlyHiddenBooking } from './platforms';
 
 // Color constants from Nayaks_Sujay_Design_Style.md
 const HEX_ACCENT = '#F26B1D';
@@ -185,38 +185,43 @@ export function generateDailyPDF(sheet: DaySheet) {
     const platformLabel = isOnlinePlatform ? r.platform.trim() : '';
     const isStayOver = r.stayType === 'stayover';
 
-    let customerCellText = r.customerName || '';
-    if (isStayOver) {
-      customerCellText = customerCellText ? `${customerCellText} [Reserved]` : `[Reserved]`;
-    } else if (isOnlinePlatform) {
-      customerCellText = customerCellText ? `${customerCellText} [${platformLabel}]` : `[${platformLabel}]`;
+    const isHiddenCashGuest = isCashOnlyHiddenBooking(r);
+    let customerCellText = isHiddenCashGuest ? '' : (r.customerName || '');
+    if (!isHiddenCashGuest) {
+      if (isStayOver) {
+        customerCellText = customerCellText ? `${customerCellText} [Reserved]` : `[Reserved]`;
+      } else if (isOnlinePlatform) {
+        customerCellText = customerCellText ? `${customerCellText} [${platformLabel}]` : `[${platformLabel}]`;
+      }
     }
 
     const cashVis = isCashVisible(r.cashUpdatedAt);
     const startingStayBal = typeof r.stayBalanceRemaining === 'number' ? r.stayBalanceRemaining : 0;
-    const tbCash = cashVis && typeof r.tBusinessCash === 'number' ? r.tBusinessCash : 0;
-    const tbOnline = typeof r.tBusinessOnline === 'number' ? r.tBusinessOnline : 0;
-    const advCash = cashVis && typeof r.advanceCash === 'number' ? r.advanceCash : 0;
-    const advOnline = typeof r.advanceOnline === 'number' ? r.advanceOnline : 0;
+    const tbCash = (!isHiddenCashGuest && cashVis && typeof r.tBusinessCash === 'number') ? r.tBusinessCash : 0;
+    const tbOnline = !isHiddenCashGuest && typeof r.tBusinessOnline === 'number' ? r.tBusinessOnline : 0;
+    const advCash = (!isHiddenCashGuest && cashVis && typeof r.advanceCash === 'number') ? r.advanceCash : 0;
+    const advOnline = !isHiddenCashGuest && typeof r.advanceOnline === 'number' ? r.advanceOnline : 0;
     const paidToday = advCash + advOnline + tbCash + tbOnline;
-    const rent = typeof r.roomRent === 'number' ? r.roomRent : 0;
+    const rent = (!isHiddenCashGuest && typeof r.roomRent === 'number') ? r.roomRent : 0;
 
     const remaining = isStayOver
       ? Math.max(0, startingStayBal - (tbCash + tbOnline))
       : (rent > 0 ? Math.max(0, rent - paidToday) : 0);
 
-    const hasPayment = (typeof r.total === 'number' && r.total > 0) || paidToday > 0;
-    const isFullyPaidStay = isStayOver && (
+    const hasPayment = (!isHiddenCashGuest && typeof r.total === 'number' && r.total > 0) || paidToday > 0;
+    const isFullyPaidStay = !isHiddenCashGuest && isStayOver && (
       startingStayBal === 0 || 
       (startingStayBal > 0 && remaining === 0) ||
       (r.stayPaidOnCheckIn && r.stayPaidOnCheckIn > 0 && !startingStayBal)
     );
 
-    let paidCellContent = !cashVis && (r.advanceCash || r.tBusinessCash)
-      ? (paidToday > 0 ? formatNum(paidToday) : '-')
-      : formatNum(r.total);
+    let paidCellContent = isHiddenCashGuest
+      ? '-'
+      : (!cashVis && (r.advanceCash || r.tBusinessCash)
+          ? (paidToday > 0 ? formatNum(paidToday) : '-')
+          : formatNum(r.total));
 
-    if (cashVis) {
+    if (!isHiddenCashGuest && cashVis) {
       if (isStayOver && (r.total === '' || !r.total || r.total === 0)) {
         if (isFullyPaidStay) {
           paidCellContent = 'PAID';
@@ -232,13 +237,13 @@ export function generateDailyPDF(sheet: DaySheet) {
       }
     }
 
-    let advCashCellText = isOnlinePlatform || isStayOver || !cashVis ? '-' : formatNum(r.advanceCash);
-    if (cashVis && !isOnlinePlatform && !isStayOver && r.advanceCash && r.advanceCashDate) {
+    let advCashCellText = isHiddenCashGuest || isOnlinePlatform || isStayOver || !cashVis ? '-' : formatNum(r.advanceCash);
+    if (!isHiddenCashGuest && cashVis && !isOnlinePlatform && !isStayOver && r.advanceCash && r.advanceCashDate) {
       advCashCellText = `${formatNum(r.advanceCash)}\n[${formatShortDate(r.advanceCashDate)}]`;
     }
 
-    let advOnlineCellText = isOnlinePlatform || isStayOver ? '-' : formatNum(r.advanceOnline);
-    if (!isOnlinePlatform && !isStayOver && r.advanceOnline && r.advanceOnlineDate) {
+    let advOnlineCellText = isHiddenCashGuest || isOnlinePlatform || isStayOver ? '-' : formatNum(r.advanceOnline);
+    if (!isHiddenCashGuest && !isOnlinePlatform && !isStayOver && r.advanceOnline && r.advanceOnlineDate) {
       advOnlineCellText = `${formatNum(r.advanceOnline)}\n[${formatShortDate(r.advanceOnlineDate)}]`;
     }
 
@@ -256,7 +261,7 @@ export function generateDailyPDF(sheet: DaySheet) {
           textColor: HEX_TEXT,
         } 
       },
-      { content: isStayOver ? '-' : formatNum(r.roomRent), styles: { halign: 'right' as const } },
+      { content: (isHiddenCashGuest || isStayOver) ? '-' : formatNum(r.roomRent), styles: { halign: 'right' as const } },
       { 
         content: customerCellText, 
         styles: { 
@@ -270,32 +275,32 @@ export function generateDailyPDF(sheet: DaySheet) {
         content: advCashCellText, 
         styles: { 
           halign: 'right' as const, 
-          textColor: isOnlinePlatform || isStayOver ? HEX_TEXT_LIGHT : (r.advanceCashDate ? '#B45309' : HEX_TEXT),
-          fontStyle: r.advanceCashDate ? 'bold' as const : 'normal' as const
+          textColor: isOnlinePlatform || isStayOver || isHiddenCashGuest ? HEX_TEXT_LIGHT : (r.advanceCashDate ? '#B45309' : HEX_TEXT),
+          fontStyle: r.advanceCashDate && !isHiddenCashGuest ? 'bold' as const : 'normal' as const
         } 
       },
       { 
         content: advOnlineCellText, 
         styles: { 
           halign: 'right' as const, 
-          textColor: isOnlinePlatform || isStayOver ? HEX_TEXT_LIGHT : (r.advanceOnlineDate ? '#B45309' : HEX_TEXT),
-          fontStyle: r.advanceOnlineDate ? 'bold' as const : 'normal' as const
+          textColor: isOnlinePlatform || isStayOver || isHiddenCashGuest ? HEX_TEXT_LIGHT : (r.advanceOnlineDate ? '#B45309' : HEX_TEXT),
+          fontStyle: r.advanceOnlineDate && !isHiddenCashGuest ? 'bold' as const : 'normal' as const
         } 
       },
-      { content: !cashVis && r.tBusinessCash !== '' ? '-' : formatNum(r.tBusinessCash), styles: { halign: 'right' as const } },
+      { content: isHiddenCashGuest || !cashVis ? '-' : formatNum(r.tBusinessCash), styles: { halign: 'right' as const } },
       { 
-        content: formatNum(r.tBusinessOnline), 
+        content: isHiddenCashGuest ? '-' : formatNum(r.tBusinessOnline), 
         styles: { 
           halign: 'right' as const, 
           fontStyle: isOnlinePlatform ? 'bold' as const : 'normal' as const,
           textColor: isOnlinePlatform ? HEX_ACCENT : HEX_TEXT,
         } 
       },
-      { content: formatNum(r.gst5), styles: { halign: 'right' as const } },
-      { content: formatNum(r.balance), styles: { halign: 'right' as const } },
-      { content: formatNum(r.refund), styles: { halign: 'right' as const } },
+      { content: isHiddenCashGuest ? '-' : formatNum(r.gst5), styles: { halign: 'right' as const } },
+      { content: isHiddenCashGuest ? '-' : formatNum(r.balance), styles: { halign: 'right' as const } },
+      { content: isHiddenCashGuest ? '-' : formatNum(r.refund), styles: { halign: 'right' as const } },
       { content: paidCellContent, styles: { halign: 'right' as const, fontStyle: 'bold' as const, textColor: (paidCellContent === 'PAID' || paidCellContent.includes('None left')) ? '#047857' : (paidCellContent.includes('left') || paidCellContent.includes('Left')) ? '#E11D48' : HEX_TEXT } },
-      { content: r.checkOut || (isStayOver && r.checkOutDate ? `Dep: ${r.checkOutDate.slice(5)}` : ''), styles: { halign: 'center' as const } },
+      { content: isHiddenCashGuest ? '' : (r.checkOut || (isStayOver && r.checkOutDate ? `Dep: ${r.checkOutDate.slice(5)}` : '')), styles: { halign: 'center' as const } },
     ];
   });
 
