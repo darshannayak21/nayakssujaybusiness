@@ -243,6 +243,7 @@ async function applyStayOversFromPrecedingDays(sheet: DaySheet): Promise<DayShee
                 currentRoom.customerName = priorRoom.customerName;
                 currentRoom.platform = priorRoom.platform || 'Direct';
                 currentRoom.isAgoda = Boolean(priorRoom.isAgoda || priorRoom.platform === 'Agoda');
+                currentRoom.ac = priorRoom.ac || 'AC';
                 currentRoom.roomRent = ''; // no rent recharge on stayover
                 currentRoom.advanceCash = '';
                 currentRoom.advanceOnline = '';
@@ -288,6 +289,7 @@ export async function syncMultiDayStays(sheet: DaySheet): Promise<void> {
     customerName: string;
     platform: string;
     isAgoda: boolean;
+    ac?: 'AC' | 'Non AC';
     paidOnCheckIn: number;
     balanceRemaining: number;
     notes?: string;
@@ -317,6 +319,7 @@ export async function syncMultiDayStays(sheet: DaySheet): Promise<void> {
           customerName: r.customerName,
           platform: r.platform || 'Direct',
           isAgoda: Boolean(r.isAgoda || r.platform === 'Agoda'),
+          ac: r.ac || 'AC',
           paidOnCheckIn: totalPaid,
           balanceRemaining: remaining,
           notes: r.notes,
@@ -379,6 +382,7 @@ export async function syncMultiDayStays(sheet: DaySheet): Promise<void> {
             room.customerName = stayInfo.customerName;
             room.platform = stayInfo.platform;
             room.isAgoda = stayInfo.isAgoda;
+            room.ac = stayInfo.ac || 'AC';
             room.roomRent = '';
             room.advanceCash = '';
             room.advanceOnline = '';

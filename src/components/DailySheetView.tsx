@@ -259,6 +259,12 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
     setTimeout(() => setSaveStatus('saved'), 350);
   };
 
+  const handleToggleAc = (roomIndex: number) => {
+    const current = sheet.rooms[roomIndex]?.ac || 'AC';
+    const next = current === 'AC' ? 'Non AC' : 'AC';
+    handleFieldChange(roomIndex, 'ac', next);
+  };
+
   const handleAddExtraRoomEntry = (roomIndex: number) => {
     const targetRoom = sheet.rooms[roomIndex];
     if (!targetRoom) return;
@@ -274,6 +280,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
 
     const extraRoom: RoomEntry = {
       ...createEmptyRoomEntry(def),
+      ac: targetRoom.ac || 'AC',
       isExtraEntry: true,
       extraEntryIndex: 2,
       checkInDate: sheet.date,
@@ -579,6 +586,20 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                     <span className="w-10 h-7 rounded-lg bg-plaza-accent-tint text-plaza-text font-bold text-sm flex items-center justify-center">
                       {room.roomNumber}
                     </span>
+                    {!isCashHiddenGuest && (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAc(room.originalIndex)}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold tracking-wider transition ${
+                          (room.ac || 'AC') === 'AC'
+                            ? 'bg-plaza-accent text-white shadow-2xs'
+                            : 'bg-slate-100 text-slate-600 border border-slate-300'
+                        }`}
+                        title={`Room ${room.roomNumber}: ${(room.ac || 'AC') === 'AC' ? 'AC' : 'Non AC'} (Click to switch)`}
+                      >
+                        {(room.ac || 'AC') === 'AC' ? 'AC' : 'NON AC'}
+                      </button>
+                    )}
                     {!isCashHiddenGuest && room.isExtraEntry && (
                       <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-plaza-accent text-white uppercase tracking-wider">
                         2nd Entry
@@ -968,7 +989,7 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
 
           {/* Table Container with Sticky Column on Mobile */}
           <div className="overflow-x-auto border border-plaza-line rounded-xl">
-            <table className="w-full border-collapse text-[12px] min-w-[1050px]">
+            <table className="w-full border-collapse text-[12px] min-w-[1100px]">
               <thead>
                 <tr className="bg-white border-b border-plaza-line text-[10px] uppercase font-bold text-plaza-text-3">
                   <th rowSpan={2} className="border-r border-plaza-line p-2 text-center w-10 sticky left-0 bg-white z-20">
@@ -976,6 +997,9 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                   </th>
                   <th rowSpan={2} className="border-r border-plaza-line p-2 text-center w-16 bg-plaza-accent-tint text-plaza-text sticky left-10 bg-plaza-accent-tint z-20">
                     ROOM<br/>NUMBER
+                  </th>
+                  <th rowSpan={2} className="border-r border-plaza-line p-1 text-center w-16">
+                    AC /<br/>NON
                   </th>
                   <th rowSpan={2} className="border-r border-plaza-line p-2 text-center w-24">
                     ROOM<br/>RENT
@@ -1120,6 +1144,26 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                             </button>
                           ))}
                         </div>
+                      </td>
+
+                      {/* AC / NON-AC TOGGLE COLUMN */}
+                      <td className="border-r border-plaza-line p-1 text-center">
+                        {isCashHiddenGuest ? (
+                          <div className="w-full text-center py-1 text-plaza-text-4 font-mono select-none">—</div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleAc(idx)}
+                            className={`w-[52px] py-1 rounded text-[10px] font-bold tracking-wider leading-none text-center transition cursor-pointer select-none ${
+                              (room.ac || 'AC') === 'AC'
+                                ? 'bg-plaza-accent text-white hover:bg-plaza-accent-hover shadow-2xs'
+                                : 'bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200'
+                            }`}
+                            title={`Room ${room.roomNumber}: ${(room.ac || 'AC') === 'AC' ? 'AC' : 'Non AC'} (Click to switch)`}
+                          >
+                            {(room.ac || 'AC') === 'AC' ? 'AC' : 'NON AC'}
+                          </button>
+                        )}
                       </td>
 
                       {/* ROOM RENT */}
@@ -1485,6 +1529,9 @@ export const DailySheetView: React.FC<DailySheetViewProps> = ({
                 <tr className="bg-plaza-accent-tint border-t-2 border-t-plaza-text font-bold text-plaza-text">
                   <td colSpan={2} className="border-r border-plaza-line py-3 px-3 text-center tracking-wider uppercase text-xs sticky left-0 z-10 bg-plaza-accent-tint">
                     TOTAL
+                  </td>
+                  <td className="border-r border-plaza-line py-3 px-1 text-center text-xs text-plaza-text-3 font-semibold select-none">
+                    —
                   </td>
                   <td className="border-r border-plaza-line py-3 px-2 text-right">
                     {sheet.totals.roomRent > 0 ? `₹${sheet.totals.roomRent.toLocaleString('en-IN')}` : '—'}

@@ -46,6 +46,7 @@ export function createEmptyRoomEntry(def: RoomDefinition): RoomEntry {
     slNo: def.slNo,
     roomNumber: def.roomNumber,
     floor: def.floor,
+    ac: 'AC',
     customerName: '',
     platform: 'Direct',
     isAgoda: false,
@@ -112,6 +113,7 @@ export function normalizeDaySheetRooms(parsedRooms: any[]): RoomEntry[] {
         ...existingList[0],
         floor: def.floor,
         slNo: def.slNo,
+        ac: existingList[0].ac || 'AC',
         isExtraEntry: false,
         extraEntryIndex: 1,
       };
@@ -124,6 +126,7 @@ export function normalizeDaySheetRooms(parsedRooms: any[]): RoomEntry[] {
           ...existingList[i],
           floor: def.floor,
           slNo: def.slNo,
+          ac: existingList[i].ac || 'AC',
           isExtraEntry: true,
           extraEntryIndex: i + 1,
         };

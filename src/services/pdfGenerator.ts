@@ -128,6 +128,7 @@ export function generateDailyPDF(sheet: DaySheet) {
     [
       { content: 'SL\nNO.', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
       { content: 'ROOM\nNUMBER', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
+      { content: 'AC /\nNON', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
       { content: 'ROOM\nRENT', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
       { content: 'CUSTOMER NAME', rowSpan: 2, styles: { halign: 'left' as const, valign: 'middle' as const } },
       { 
@@ -261,6 +262,14 @@ export function generateDailyPDF(sheet: DaySheet) {
           textColor: HEX_TEXT,
         } 
       },
+      {
+        content: (r.ac || 'AC') === 'AC' ? 'AC' : 'NON AC',
+        styles: {
+          halign: 'center' as const,
+          fontStyle: 'bold' as const,
+          textColor: (r.ac || 'AC') === 'AC' ? HEX_ACCENT : HEX_TEXT_MUTED,
+        }
+      },
       { content: (isHiddenCashGuest || isStayOver) ? '-' : formatNum(r.roomRent), styles: { halign: 'right' as const } },
       { 
         content: customerCellText, 
@@ -316,6 +325,7 @@ export function generateDailyPDF(sheet: DaySheet) {
         textColor: HEX_TEXT,
       } 
     },
+    { content: '-', styles: { halign: 'center' as const, fillColor: HEX_ACCENT_TINT, textColor: HEX_TEXT_MUTED } },
     { content: formatNum(sheet.totals.roomRent), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
     { content: sheet.totals.agodaBookingsCount > 0 ? `${sheet.totals.agodaBookingsCount} Agoda Bookings` : '', styles: { halign: 'left' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT, textColor: HEX_ACCENT } },
     { content: stealth ? '-' : formatNum(sheet.totals.advanceCash), styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: HEX_ACCENT_TINT } },
@@ -366,17 +376,18 @@ export function generateDailyPDF(sheet: DaySheet) {
     columnStyles: {
       0: { cellWidth: 10 },  // SL NO
       1: { cellWidth: 14 },  // ROOM NUMBER
-      2: { cellWidth: 22 },  // ROOM RENT
-      3: { cellWidth: 55 },  // CUSTOMER NAME (Agoda)
-      4: { cellWidth: 21 },  // ADV CASH
-      5: { cellWidth: 21 },  // ADV ONLINE
-      6: { cellWidth: 25 },  // TB CASH
-      7: { cellWidth: 25 },  // TB ONLINE
-      8: { cellWidth: 16 },  // GST
-      9: { cellWidth: 17 },  // BALANCE
-      10: { cellWidth: 16 }, // REFUND
-      11: { cellWidth: 20 }, // TOTAL
-      12: { cellWidth: 15 }, // CHECK OUT
+      2: { cellWidth: 12 },  // AC / NON
+      3: { cellWidth: 20 },  // ROOM RENT
+      4: { cellWidth: 47 },  // CUSTOMER NAME (Agoda)
+      5: { cellWidth: 21 },  // ADV CASH
+      6: { cellWidth: 21 },  // ADV ONLINE
+      7: { cellWidth: 24 },  // TB CASH
+      8: { cellWidth: 24 },  // TB ONLINE
+      9: { cellWidth: 16 },  // GST
+      10: { cellWidth: 16 }, // BALANCE
+      11: { cellWidth: 16 }, // REFUND
+      12: { cellWidth: 21 }, // TOTAL
+      13: { cellWidth: 15 }, // CHECK OUT
     },
     didDrawCell: (data) => {
       // Floor divider lines: draw when moving to a new floor in the body

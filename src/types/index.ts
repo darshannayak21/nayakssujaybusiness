@@ -2,6 +2,7 @@ export interface RoomEntry {
   slNo: number;
   roomNumber: string;
   floor: 1 | 2 | 3;
+  ac?: 'AC' | 'Non AC';          // 'AC' (default) or 'Non AC'
   customerName: string;
   platform: string;     // 'Direct' | 'Agoda' | 'MMT' | etc. Default: 'Direct'
   isAgoda?: boolean;    // retained for backward compatibility (platform === 'Agoda')
